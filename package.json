@@ -1,0 +1,17 @@
+{
+  "name": "research-it-dashboard",
+  "version": "1.0.0",
+  "description": "Research Networking + Mentorship + Collaboration Platform UI design mockup",
+  "main": "index.html",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview"
+  },
+  "devDependencies": {
+    "vite": "^5.0.0"
+  },
+  "dependencies": {
+    "@supabase/supabase-js": "^2.108.1"
+  }
+}

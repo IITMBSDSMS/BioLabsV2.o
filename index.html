@@ -1185,6 +1185,22 @@
         </div>
     </div>
 
+    <!-- MODAL: Resume / CV Viewer -->
+    <div id="modal-resume-viewer" class="modal-overlay">
+        <div class="info-page-modal" style="max-width:700px; width: 90%; padding: 24px; background: var(--bg-card); border-radius: var(--radius-md); display: flex; flex-direction: column; gap: 15px;">
+            <div class="info-modal-header" style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid var(--border-color); padding-bottom: 12px;">
+                <div style="display: flex; align-items: center; gap: 8px;">
+                    <i class="fa-solid fa-file-pdf" style="color: var(--color-primary); font-size: 1.4rem;"></i>
+                    <h2 id="resume-viewer-title" style="margin: 0; font-size: 1.2rem; font-weight: 800; color: var(--text-main);">Applicant Resume Preview</h2>
+                </div>
+                <button class="close-auth-btn" onclick="closeInfoModal('modal-resume-viewer')" style="border: none; background: transparent; color: var(--text-muted); cursor: pointer; font-size: 1.2rem; display: flex; align-items: center; justify-content: center;"><i class="fa-solid fa-xmark"></i></button>
+            </div>
+            <div id="resume-viewer-body" style="width: 100%; height: 450px; overflow: auto; border: 1px solid var(--border-color); border-radius: var(--radius-sm); background: var(--bg-page); display: flex; align-items: center; justify-content: center;">
+                <!-- Embedded resume or message -->
+            </div>
+        </div>
+    </div>
+
     <!-- MODAL: Student Skill Assessment Quiz -->
     <div id="modal-student-quiz" class="modal-overlay">
         <div class="info-page-modal" style="max-width:560px; padding: 24px; background: var(--bg-card); border-radius: var(--radius-md);">
@@ -1488,6 +1504,14 @@
 
                     <!-- Right Listings Table/Cards -->
                     <div class="listings-table-container">
+                        <!-- Type filter tabs -->
+                        <div class="opps-type-tabs" style="display: flex; gap: 8px; margin-bottom: 16px; border-bottom: 1px solid var(--border-color); padding-bottom: 10px;">
+                            <button class="action-btn outline-btn opp-type-tab active" data-type="all" onclick="window.filterOpportunitiesByType('all', this)" style="cursor: pointer; font-size: 0.8rem; padding: 6px 12px; margin-bottom: 0;">All Listings</button>
+                            <button class="action-btn outline-btn opp-type-tab" data-type="project" onclick="window.filterOpportunitiesByType('project', this)" style="cursor: pointer; font-size: 0.8rem; padding: 6px 12px; margin-bottom: 0;"><i class="fa-solid fa-microscope"></i> Lab Projects</button>
+                            <button class="action-btn outline-btn opp-type-tab" data-type="problem" onclick="window.filterOpportunitiesByType('problem', this)" style="cursor: pointer; font-size: 0.8rem; padding: 6px 12px; margin-bottom: 0;"><i class="fa-solid fa-triangle-exclamation"></i> Research Challenges</button>
+                            <button class="action-btn outline-btn opp-type-tab" data-type="fellowship" onclick="window.filterOpportunitiesByType('fellowship', this)" style="cursor: pointer; font-size: 0.8rem; padding: 6px 12px; margin-bottom: 0;"><i class="fa-solid fa-user-graduate"></i> Fellowships</button>
+                            <button class="action-btn outline-btn opp-type-tab" data-type="session" onclick="window.filterOpportunitiesByType('session', this)" style="cursor: pointer; font-size: 0.8rem; padding: 6px 12px; margin-bottom: 0;"><i class="fa-solid fa-chalkboard-user"></i> Mentorship & Consulting</button>
+                        </div>
                         <table class="ledger-table" id="global-opps-table">
                             <thead>
                                 <tr>
@@ -2044,6 +2068,24 @@
                                         <input type="text" id="res-inst" value="AIIMS Delhi">
                                     </div>
                                     <div class="form-group">
+                                        <label for="res-bio">Research Bio / Statement</label>
+                                        <textarea id="res-bio" rows="2" placeholder="Briefly describe your lab's mission or your research statement..." style="width: 100%; padding: 8px 10px; border-radius: var(--radius-sm); border: 1px solid var(--border-color); background: var(--bg-card); color: var(--text-main); font-size: 0.85rem;"></textarea>
+                                    </div>
+                                    <div class="form-row">
+                                        <div class="form-group flex-1">
+                                            <label for="res-scholar">Google Scholar URL</label>
+                                            <input type="url" id="res-scholar" placeholder="https://scholar.google.com/citations?user=...">
+                                        </div>
+                                        <div class="form-group flex-1">
+                                            <label for="res-website">Lab Website / Personal URL</label>
+                                            <input type="url" id="res-website" placeholder="https://labname.aiims.edu">
+                                        </div>
+                                    </div>
+                                    <div class="form-group">
+                                        <label for="res-linkedin">LinkedIn Profile URL</label>
+                                        <input type="url" id="res-linkedin" value="https://linkedin.com/in/samir-kalra-mock" placeholder="https://linkedin.com/in/username">
+                                    </div>
+                                    <div class="form-group">
                                         <label for="res-domain">Primary Domain</label>
                                         <select id="res-domain">
                                             <option value="Healthcare AI">Healthcare AI</option>
@@ -2052,13 +2094,9 @@
                                             <option value="Virology">Virology</option>
                                         </select>
                                     </div>
-                                    <div class="form-group">
+                                    <div class="form-group" style="margin-bottom: 15px;">
                                         <label for="res-skills"><i class="fa-solid fa-code"></i> Skills (Comma separated)</label>
                                         <input type="text" id="res-skills" value="Python, TensorFlow, R, MATLAB" placeholder="e.g. Python, Deep Learning, R">
-                                    </div>
-                                    <div class="form-group" style="margin-bottom: 15px;">
-                                        <label for="res-linkedin">LinkedIn Profile URL</label>
-                                        <input type="url" id="res-linkedin" value="https://linkedin.com/in/samir-kalra-mock" placeholder="https://linkedin.com/in/username">
                                     </div>
                                     <button type="submit" class="submit-profile-btn profile-save-btn" id="researcher-profile-save-btn"><i class="fa-solid fa-floppy-disk" id="researcher-save-icon"></i> Save Lab Details</button>
                                 </form>
@@ -2187,6 +2225,14 @@
                                 <!-- Researcher Panel -->
                                 <form id="action-panel-researcher" class="action-panel">
                                     <div class="form-group">
+                                        <label for="proj-type">Opportunity Type</label>
+                                        <select id="proj-type" onchange="window.toggleOpportunityFormFields()" style="width: 100%; padding: 8px 10px; border-radius: var(--radius-sm); border: 1px solid var(--border-color); background: var(--bg-card); color: var(--text-main); font-size: 0.85rem;">
+                                            <option value="project">Lab Project (Student Recruitment)</option>
+                                            <option value="problem">Open Research Problem (Scientific Challenge)</option>
+                                            <option value="fellowship">Fellowship Program (Structured Cohort)</option>
+                                        </select>
+                                    </div>
+                                    <div class="form-group">
                                         <label for="proj-title">Project Title</label>
                                         <input type="text" id="proj-title" placeholder="e.g. GenAI for Radiology Analytics" required>
                                     </div>
@@ -2203,8 +2249,20 @@
                                             </select>
                                         </div>
                                         <div class="form-group flex-1">
-                                            <label for="proj-size">Team Size</label>
+                                            <label for="proj-size">Team Size / Slots Available</label>
                                             <input type="number" id="proj-size" value="3" min="1" max="10">
+                                        </div>
+                                    </div>
+                                    <div class="form-row" id="opp-fellowship-extra" style="display: none;">
+                                        <div class="form-group flex-1">
+                                            <label for="proj-stipend">Fellowship Stipend (per month)</label>
+                                            <input type="text" id="proj-stipend" placeholder="e.g. Rs. 35,000 / Month" value="">
+                                        </div>
+                                    </div>
+                                    <div class="form-row" id="opp-problem-extra" style="display: none;">
+                                        <div class="form-group flex-1">
+                                            <label for="proj-bounty">Credits Reward / Bounty</label>
+                                            <input type="number" id="proj-bounty" placeholder="e.g. 50" value="0" min="0">
                                         </div>
                                     </div>
                                     <div class="form-row">
@@ -2237,11 +2295,25 @@
                                                 <option value="Workshop">Workshop</option>
                                                 <option value="1-on-1 Mentorship">1-on-1 Guidance</option>
                                                 <option value="Journal Club">Journal Club</option>
+                                                <option value="Research Consulting">Research Consulting</option>
                                             </select>
                                         </div>
                                         <div class="form-group flex-1">
                                             <label for="session-date">Date & Time</label>
                                             <input type="datetime-local" id="session-date" required>
+                                        </div>
+                                    </div>
+                                    <div class="form-row" style="margin-top: 5px;">
+                                        <div class="form-group flex-1">
+                                            <label for="sess-pricing">Session Cost</label>
+                                            <select id="sess-pricing" onchange="document.getElementById('sess-price-wrapper').style.display = this.value === 'paid' ? 'block' : 'none'" style="width: 100%; padding: 8px 10px; border-radius: var(--radius-sm); border: 1px solid var(--border-color); background: var(--bg-card); color: var(--text-main); font-size: 0.85rem;">
+                                                <option value="free">Free (Open to All)</option>
+                                                <option value="paid">Premium (Requires Credits)</option>
+                                            </select>
+                                        </div>
+                                        <div class="form-group flex-1" id="sess-price-wrapper" style="display: none;">
+                                            <label for="sess-price-val">Price in Credits</label>
+                                            <input type="number" id="sess-price-val" value="0" min="0" style="width: 100%; padding: 8px 10px; border-radius: var(--radius-sm); border: 1px solid var(--border-color); background: var(--bg-card); color: var(--text-main); font-size: 0.85rem;">
                                         </div>
                                     </div>
                                     <div class="form-group">
@@ -2370,6 +2442,14 @@
                             <div class="card-body no-padding overflow-x">
                                 <!-- Tab 1: Opps -->
                                 <div id="tab-content-opportunities" class="tab-view active">
+                                    <!-- Type filter tabs -->
+                                    <div class="opps-type-tabs" style="display: flex; gap: 8px; margin: 15px; border-bottom: 1px solid var(--border-color); padding-bottom: 10px;">
+                                        <button class="action-btn outline-btn opp-type-tab active" data-type="all" onclick="window.filterOpportunitiesByType('all', this)" style="cursor: pointer; font-size: 0.8rem; padding: 6px 12px; margin-bottom: 0;">All Listings</button>
+                                        <button class="action-btn outline-btn opp-type-tab" data-type="project" onclick="window.filterOpportunitiesByType('project', this)" style="cursor: pointer; font-size: 0.8rem; padding: 6px 12px; margin-bottom: 0;"><i class="fa-solid fa-microscope"></i> Lab Projects</button>
+                                        <button class="action-btn outline-btn opp-type-tab" data-type="problem" onclick="window.filterOpportunitiesByType('problem', this)" style="cursor: pointer; font-size: 0.8rem; padding: 6px 12px; margin-bottom: 0;"><i class="fa-solid fa-triangle-exclamation"></i> Research Challenges</button>
+                                        <button class="action-btn outline-btn opp-type-tab" data-type="fellowship" onclick="window.filterOpportunitiesByType('fellowship', this)" style="cursor: pointer; font-size: 0.8rem; padding: 6px 12px; margin-bottom: 0;"><i class="fa-solid fa-user-graduate"></i> Fellowships</button>
+                                        <button class="action-btn outline-btn opp-type-tab" data-type="session" onclick="window.filterOpportunitiesByType('session', this)" style="cursor: pointer; font-size: 0.8rem; padding: 6px 12px; margin-bottom: 0;"><i class="fa-solid fa-chalkboard-user"></i> Mentorship & Consulting</button>
+                                    </div>
                                     <table class="ledger-table" id="opportunities-table">
                                         <thead>
                                             <!-- Dynamic headers -->
@@ -2432,6 +2512,16 @@
                                                 <div class="input-group" style="flex: 1; min-width: 120px; margin-bottom: 0;">
                                                     <label style="font-size: 0.75rem; font-weight: 700; color: var(--text-label); margin-bottom: 4px; display: block;">Number of Modules</label>
                                                     <input type="number" id="course-modules" required min="1" max="24" value="8" style="width: 100%; padding: 8px 10px; border-radius: var(--radius-sm); border: 1px solid var(--border-color); background: var(--bg-card); color: var(--text-main); font-size: 0.85rem;">
+                                                </div>
+                                            </div>
+                                            <div style="display: flex; gap: 12px; flex-wrap: wrap; align-items: center; margin-bottom: 5px;">
+                                                <div class="input-group" style="flex: 1; min-width: 150px; margin-bottom: 0; display: flex; align-items: center; gap: 8px;">
+                                                    <input type="checkbox" id="course-is-paid" onchange="document.getElementById('course-price-wrapper').style.display = this.checked ? 'block' : 'none'" style="cursor: pointer;">
+                                                    <label for="course-is-paid" style="font-size: 0.85rem; font-weight: 700; color: var(--text-main); margin-bottom: 0; cursor: pointer;">Require Credits (Paid Course)</label>
+                                                </div>
+                                                <div class="input-group" id="course-price-wrapper" style="flex: 1; min-width: 120px; margin-bottom: 0; display: none;">
+                                                    <label style="font-size: 0.75rem; font-weight: 700; color: var(--text-label); margin-bottom: 4px; display: block;">Price in Credits</label>
+                                                    <input type="number" id="course-price" min="0" value="0" style="width: 100%; padding: 8px 10px; border-radius: var(--radius-sm); border: 1px solid var(--border-color); background: var(--bg-card); color: var(--text-main); font-size: 0.85rem;">
                                                 </div>
                                             </div>
                                             <button type="submit" class="portal-btn" style="background: var(--color-teal); align-self: flex-start; padding: 8px 16px; font-size: 0.85rem; height: auto;">

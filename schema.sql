@@ -30,7 +30,25 @@ ALTER TABLE public.profiles
   ADD COLUMN IF NOT EXISTS referred_by_code text DEFAULT '',
   ADD COLUMN IF NOT EXISTS personal_ambassador_code text DEFAULT '',
   ADD COLUMN IF NOT EXISTS resume_url text DEFAULT '',
-  ADD COLUMN IF NOT EXISTS quiz_completed boolean DEFAULT false;
+  ADD COLUMN IF NOT EXISTS quiz_completed boolean DEFAULT false,
+  ADD COLUMN IF NOT EXISTS research_bio text DEFAULT '',
+  ADD COLUMN IF NOT EXISTS google_scholar text DEFAULT '',
+  ADD COLUMN IF NOT EXISTS lab_website text DEFAULT '';
+
+ALTER TABLE public.opportunities
+  ADD COLUMN IF NOT EXISTS type text DEFAULT 'project' CHECK (type IN ('project', 'problem', 'fellowship')),
+  ADD COLUMN IF NOT EXISTS price_credits integer DEFAULT 0,
+  ADD COLUMN IF NOT EXISTS stipend text DEFAULT '';
+
+ALTER TABLE public.courses
+  ADD COLUMN IF NOT EXISTS is_paid boolean DEFAULT false,
+  ADD COLUMN IF NOT EXISTS price_credits integer DEFAULT 0;
+
+ALTER TABLE public.mentorship_sessions
+  ADD COLUMN IF NOT EXISTS type text DEFAULT 'mentorship' CHECK (type IN ('mentorship', 'consulting')),
+  ADD COLUMN IF NOT EXISTS price_credits integer DEFAULT 0,
+  ADD COLUMN IF NOT EXISTS mentor_name text DEFAULT '',
+  ADD COLUMN IF NOT EXISTS mentor_id uuid REFERENCES auth.users(id) ON DELETE CASCADE;
 
 CREATE UNIQUE INDEX IF NOT EXISTS profiles_user_id_idx ON public.profiles(user_id);
 

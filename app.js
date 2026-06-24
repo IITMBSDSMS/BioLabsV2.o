@@ -265,6 +265,9 @@ const STATE = {
         avatarImg: '',
         streak: 5,
         credits: 120,
+        research_bio: '',
+        google_scholar: '',
+        lab_website: '',
         dailyTasks: {
             checkIn: { label: "Daily Attendance Check-in", credits: 5, completed: false },
             readPaper: { label: "Read a Showcase Paper", credits: 10, completed: false },
@@ -565,6 +568,9 @@ async function loadDataFromSupabase() {
                 STATE.user.verified = currentUserProfile.verified || false;
                 STATE.user.resume_url = currentUserProfile.resume_url || '';
                 STATE.user.quiz_completed = currentUserProfile.quiz_completed || false;
+                STATE.user.research_bio = currentUserProfile.research_bio || '';
+                STATE.user.google_scholar = currentUserProfile.google_scholar || '';
+                STATE.user.lab_website = currentUserProfile.lab_website || '';
             }
         }
 
@@ -602,7 +608,10 @@ async function loadDataFromSupabase() {
                 skills: o.skills,
                 duration: o.duration,
                 slots: o.slots,
-                applied: o.applied
+                applied: o.applied,
+                type: o.type,
+                price_credits: o.price_credits,
+                stipend: o.stipend
             }));
         }
 
@@ -647,7 +656,11 @@ async function loadDataFromSupabase() {
                 topic: s.topic,
                 date: s.date,
                 platform: s.platform,
-                status: s.status
+                status: s.status,
+                type: s.type,
+                price_credits: s.price_credits,
+                mentor_name: s.mentor_name,
+                mentor_id: s.mentor_id
             }));
         }
 
@@ -679,7 +692,9 @@ async function loadDataFromSupabase() {
                 modules: c.modules,
                 progress: c.progress,
                 creator_name: c.creator_name,
-                creator_id: c.creator_id
+                creator_id: c.creator_id,
+                is_paid: c.is_paid || false,
+                price_credits: c.price_credits || 0
             }));
         }
 
@@ -1696,6 +1711,9 @@ function setupEventListeners() {
         STATE.user.institution  = document.getElementById('res-inst').value;
         STATE.user.domain       = document.getElementById('res-domain').value;
         STATE.user.linkedin_url = document.getElementById('res-linkedin').value;
+        STATE.user.research_bio   = document.getElementById('res-bio')?.value.trim() || '';
+        STATE.user.google_scholar = document.getElementById('res-scholar')?.value.trim() || '';
+        STATE.user.lab_website    = document.getElementById('res-website')?.value.trim() || '';
         const skillsRaw         = document.getElementById('res-skills')?.value || '';
         const skillsArray       = skillsRaw.split(',').map(s => s.trim()).filter(s => s);
         STATE.user.skills       = skillsRaw;
@@ -1708,6 +1726,9 @@ function setupEventListeners() {
             memProfile.domain       = STATE.user.domain;
             memProfile.linkedin_url = STATE.user.linkedin_url;
             memProfile.skills       = skillsArray;
+            memProfile.research_bio   = STATE.user.research_bio;
+            memProfile.google_scholar = STATE.user.google_scholar;
+            memProfile.lab_website    = STATE.user.lab_website;
         }
         const dirPerson = STATE.directory.find(d => d.name === STATE.user.name || d.role === 'researcher');
         if (dirPerson) {
@@ -1716,6 +1737,9 @@ function setupEventListeners() {
             dirPerson.domain       = STATE.user.domain;
             dirPerson.linkedin_url = STATE.user.linkedin_url;
             dirPerson.skills       = skillsArray;
+            dirPerson.research_bio   = STATE.user.research_bio;
+            dirPerson.google_scholar = STATE.user.google_scholar;
+            dirPerson.lab_website    = STATE.user.lab_website;
         }
 
         if (supabase) {
@@ -1726,7 +1750,10 @@ function setupEventListeners() {
                     institution:  STATE.user.institution,
                     domain:       STATE.user.domain,
                     linkedin_url: STATE.user.linkedin_url,
-                    skills:       skillsArray
+                    skills:       skillsArray,
+                    research_bio: STATE.user.research_bio || '',
+                    google_scholar: STATE.user.google_scholar || '',
+                    lab_website: STATE.user.lab_website || ''
                 };
                 const query = identifier
                     ? supabase.from('profiles').update(payload).eq('id', identifier)
@@ -1832,6 +1859,10 @@ function setupEventListeners() {
         const duration = document.getElementById('proj-duration').value;
         const skills = document.getElementById('proj-skills').value;
         
+        const type = document.getElementById('proj-type').value;
+        const stipend = type === 'fellowship' ? document.getElementById('proj-stipend').value.trim() : '';
+        const priceCredits = type === 'problem' ? (parseInt(document.getElementById('proj-bounty').value) || 0) : 0;
+        
         const newProj = {
             title: title,
             researcher: STATE.user.loggedIn ? STATE.user.name : "Dr. Samir Kalra",
@@ -1840,19 +1871,28 @@ function setupEventListeners() {
             skills: skills,
             duration: duration,
             slots: size,
-            applied: false
+            applied: false,
+            type: type,
+            stipend: stipend,
+            price_credits: priceCredits
         };
 
         if (supabase) {
             const { error } = await supabase.from('opportunities').insert([newProj]);
             if (error) {
-                showToast("❌ Failed to publish project: " + error.message);
+                showToast("❌ Failed to publish opportunity: " + error.message);
                 return;
             }
         }
 
-        showToast(`Project '${title}' published successfully!`);
+        showToast(`Opportunity '${title}' published successfully!`);
         DOM.researcherActionPanel.reset();
+        
+        // Hide conditional fields on reset
+        const fellowshipExtra = document.getElementById('opp-fellowship-extra');
+        const problemExtra = document.getElementById('opp-problem-extra');
+        if (fellowshipExtra) fellowshipExtra.style.display = 'none';
+        if (problemExtra) problemExtra.style.display = 'none';
         
         await loadDataFromSupabase();
         switchTab('opportunities');
@@ -1872,12 +1912,20 @@ function setupEventListeners() {
         const dateInput = document.getElementById('session-date').value;
         const dateString = new Date(dateInput).toLocaleString();
         
+        const pricing = document.getElementById('sess-pricing').value;
+        const priceCredits = pricing === 'paid' ? (parseInt(document.getElementById('sess-price-val').value) || 0) : 0;
+        const dbType = type === 'Research Consulting' ? 'consulting' : 'mentorship';
+        
         const newSession = {
             student: "Open Reservation",
             topic: `${type}: ${title}`,
             date: dateString,
             platform: "Zoom Link Pending",
-            status: "Scheduled"
+            status: "Scheduled",
+            type: dbType,
+            price_credits: priceCredits,
+            mentor_name: STATE.user.name || "Dr. Kabir Mehta",
+            mentor_id: STATE.user.supabaseUid || null
         };
         
         if (supabase) {
@@ -1890,6 +1938,10 @@ function setupEventListeners() {
 
         showToast(`Session on '${title}' scheduled successfully!`);
         DOM.mentorActionPanel.reset();
+        
+        // Hide price field wrapper on reset
+        const priceWrapper = document.getElementById('sess-price-wrapper');
+        if (priceWrapper) priceWrapper.style.display = 'none';
         
         await loadDataFromSupabase();
         switchTab('opportunities');
@@ -2245,6 +2297,8 @@ function setupEventListeners() {
                 const category = document.getElementById('course-category').value;
                 const duration = document.getElementById('course-duration').value.trim();
                 const modules = parseInt(document.getElementById('course-modules').value);
+                const isPaid = document.getElementById('course-is-paid').checked;
+                const priceCredits = isPaid ? (parseInt(document.getElementById('course-price').value) || 0) : 0;
 
                 if (!title || !duration || !modules) return;
 
@@ -2262,7 +2316,9 @@ function setupEventListeners() {
                         modules,
                         progress: 0,
                         creator_name: STATE.user.name,
-                        creator_id: STATE.user.supabaseUid || null
+                        creator_id: STATE.user.supabaseUid || null,
+                        is_paid: isPaid,
+                        price_credits: priceCredits
                     };
 
                     if (supabase) {
@@ -2479,6 +2535,9 @@ async function handleRealAuthSession(session) {
             STATE.user.personal_ambassador_code = profile.personal_ambassador_code || '';
             STATE.user.resume_url = profile.resume_url || '';
             STATE.user.quiz_completed = profile.quiz_completed || false;
+            STATE.user.research_bio = profile.research_bio || '';
+            STATE.user.google_scholar = profile.google_scholar || '';
+            STATE.user.lab_website = profile.lab_website || '';
 
             switchActiveRole(profile.role);
             closeAuthModal();
@@ -2976,6 +3035,9 @@ function switchActiveRole(role) {
             STATE.user.skills       = (p.skills || []).join(', ');
             STATE.user.avatarImg    = p.avatar_url || '';
             STATE.user.linkedin_url = p.linkedin_url || '';
+            STATE.user.research_bio   = p.research_bio || '';
+            STATE.user.google_scholar = p.google_scholar || '';
+            STATE.user.lab_website    = p.lab_website || '';
         }
     }
     
@@ -3161,6 +3223,9 @@ function populateProfileForms() {
         const domEl    = document.getElementById('res-domain');
         const liEl     = document.getElementById('res-linkedin');
         const skillEl  = document.getElementById('res-skills');
+        const bioEl    = document.getElementById('res-bio');
+        const scholarEl = document.getElementById('res-scholar');
+        const websiteEl = document.getElementById('res-website');
         if (nameEl  && user.name)          nameEl.value  = user.name;
         if (desigEl && user.designation)   desigEl.value = user.designation;
         if (labEl   && user.lab)           labEl.value   = user.lab;
@@ -3172,6 +3237,9 @@ function populateProfileForms() {
         }
         if (liEl    && user.linkedin_url)  liEl.value   = user.linkedin_url;
         if (skillEl)                       skillEl.value = skills;
+        if (bioEl   && user.research_bio)  bioEl.value   = user.research_bio;
+        if (scholarEl && user.google_scholar) scholarEl.value = user.google_scholar;
+        if (websiteEl && user.lab_website) websiteEl.value = user.lab_website;
     } else if (role === 'mentor') {
         const nameEl    = document.getElementById('mentor-name');
         const fieldEl   = document.getElementById('mentor-field');
@@ -3437,59 +3505,119 @@ function renderVerificationStatusCard() {
         (!v.user_id && v.name === STATE.user.name && v.status === 'Pending')
     );
 
+    let step1Icon = '<i class="fa-regular fa-circle" style="color: var(--text-muted);"></i>';
+    let step2Icon = '<i class="fa-regular fa-circle" style="color: var(--text-muted);"></i>';
+    let step3Icon = '<i class="fa-regular fa-circle" style="color: var(--text-muted);"></i>';
+
+    let step1Color = 'var(--text-muted)';
+    let step2Color = 'var(--text-muted)';
+    let step3Color = 'var(--text-muted)';
+    let step1Class = 'step-pending';
+    let step2Class = 'step-pending';
+    let step3Class = 'step-pending';
+
     if (isVerified) {
         if (badge) {
             badge.textContent = "VERIFIED";
             badge.className = "badge-tag label-green";
         }
-        cardBody.innerHTML = `
-            <div style="text-align: center; padding: 15px 0;">
-                <div style="width: 56px; height: 56px; border-radius: 50%; background: rgba(16, 185, 129, 0.1); display: flex; align-items: center; justify-content: center; margin: 0 auto 12px;">
-                    <i class="fa-solid fa-circle-check" style="color: var(--color-emerald); font-size: 2rem;"></i>
-                </div>
-                <h4 style="margin: 0 0 6px; font-weight: 700; color: var(--text-main);">Verified Academic Profile</h4>
-                <p style="font-size: 0.8rem; color: var(--text-muted); margin: 0;">You have full publishing and creation access on BioLabs Research.</p>
-            </div>
-        `;
+        step1Icon = '<i class="fa-solid fa-circle-check" style="color: var(--color-emerald);"></i>';
+        step2Icon = '<i class="fa-solid fa-circle-check" style="color: var(--color-emerald);"></i>';
+        step3Icon = '<i class="fa-solid fa-circle-check" style="color: var(--color-emerald);"></i>';
+        step1Color = 'var(--text-main)';
+        step2Color = 'var(--text-main)';
+        step3Color = 'var(--text-main)';
+        step1Class = 'step-done';
+        step2Class = 'step-done';
+        step3Class = 'step-done';
     } else if (pendingRequest) {
         if (badge) {
             badge.textContent = "PENDING";
             badge.className = "badge-tag label-orange";
         }
-        cardBody.innerHTML = `
-            <div style="text-align: center; padding: 15px 0;">
-                <div style="width: 56px; height: 56px; border-radius: 50%; background: rgba(245, 158, 11, 0.1); display: flex; align-items: center; justify-content: center; margin: 0 auto 12px;">
-                    <i class="fa-solid fa-hourglass-half" style="color: var(--color-orange); font-size: 1.8rem;"></i>
-                </div>
-                <h4 style="margin: 0 0 6px; font-weight: 700; color: var(--text-main);">Verification Pending</h4>
-                <p style="font-size: 0.8rem; color: var(--text-muted); margin: 0;">Your request is under admin review. We will notify you at <strong>${STATE.user.email}</strong> once approved.</p>
-            </div>
-        `;
+        step1Icon = '<i class="fa-solid fa-circle-check" style="color: var(--color-emerald);"></i>';
+        step2Icon = '<i class="fa-solid fa-hourglass-half" style="color: var(--color-orange);"></i>';
+        step3Icon = '<i class="fa-regular fa-circle" style="color: var(--text-muted);"></i>';
+        step1Color = 'var(--text-main)';
+        step2Color = 'var(--text-main)';
+        step3Color = 'var(--text-muted)';
+        step1Class = 'step-done';
+        step2Class = 'step-active';
+        step3Class = 'step-pending';
     } else {
         if (badge) {
             badge.textContent = "UNVERIFIED";
             badge.className = "badge-tag label-red";
         }
-        cardBody.innerHTML = `
-            <p style="font-size: 0.82rem; color: var(--text-muted); margin-bottom: 12px; line-height: 1.5;">
-                Verify your institutional affiliation to post opportunities, schedule mentorship sessions, and create courses.
+        step1Icon = '<i class="fa-regular fa-circle" style="color: var(--text-muted);"></i>';
+        step2Icon = '<i class="fa-regular fa-circle" style="color: var(--text-muted);"></i>';
+        step3Icon = '<i class="fa-regular fa-circle" style="color: var(--text-muted);"></i>';
+        step1Color = 'var(--text-muted)';
+        step2Color = 'var(--text-muted)';
+        step3Color = 'var(--text-muted)';
+        step1Class = 'step-pending';
+        step2Class = 'step-pending';
+        step3Class = 'step-pending';
+    }
+
+    let statusContent = '';
+    if (isVerified) {
+        statusContent = `
+            <div style="text-align: center; padding: 10px 0 15px;">
+                <h4 style="margin: 0 0 4px; font-weight: 700; color: var(--text-main); font-size: 0.9rem;">Verified Academic Profile</h4>
+                <p style="font-size: 0.78rem; color: var(--text-muted); margin: 0; line-height: 1.4;">You have full publishing and creation access on BioLabs Research.</p>
+            </div>
+        `;
+    } else if (pendingRequest) {
+        statusContent = `
+            <div style="text-align: center; padding: 10px 0 15px;">
+                <h4 style="margin: 0 0 4px; font-weight: 700; color: var(--text-main); font-size: 0.9rem;">Verification Pending</h4>
+                <p style="font-size: 0.78rem; color: var(--text-muted); margin: 0; line-height: 1.4;">Your request is under admin review. We will notify you once approved.</p>
+            </div>
+        `;
+    } else {
+        statusContent = `
+            <p style="font-size: 0.8rem; color: var(--text-muted); margin-bottom: 12px; line-height: 1.5; text-align: center;">
+                Verify your institutional affiliation to unlock posting projects, challenges, paid courses, and premium consulting.
             </p>
             <form id="submit-verification-form" style="display: flex; flex-direction: column; gap: 10px;">
                 <div class="form-group" style="margin-bottom: 0;">
                     <label style="font-size: 0.72rem; margin-bottom: 4px;">Institutional Affiliation</label>
-                    <input type="text" id="verif-affiliation" required value="${STATE.user.institution || ''}" placeholder="e.g. AIIMS Delhi / IISc" style="width: 100%; padding: 8px 10px; border-radius: var(--radius-sm); border: 1px solid var(--border-color); background: var(--bg-card); color: var(--text-main); font-size: 0.82rem;">
+                    <input type="text" id="verif-affiliation" required value="${STATE.user.institution || ''}" placeholder="e.g. AIIMS Delhi / IISc" style="width: 100%; padding: 8px 10px; border-radius: var(--radius-sm); border: 1px solid var(--border-color); background: var(--bg-page); color: var(--text-main); font-size: 0.82rem;">
                 </div>
                 <div class="form-group" style="margin-bottom: 0;">
                     <label style="font-size: 0.72rem; margin-bottom: 4px;">Short Bio / Research Focus</label>
-                    <textarea id="verif-bio" required rows="2" placeholder="e.g. PI at Neuro-Genetics Division. Focused on genomics." style="width: 100%; padding: 8px 10px; border-radius: var(--radius-sm); border: 1px solid var(--border-color); background: var(--bg-card); color: var(--text-main); font-size: 0.82rem; font-family: inherit; resize: vertical;"></textarea>
+                    <textarea id="verif-bio" required rows="2" placeholder="e.g. PI at Neuro-Genetics Division. Focused on genomics." style="width: 100%; padding: 8px 10px; border-radius: var(--radius-sm); border: 1px solid var(--border-color); background: var(--bg-page); color: var(--text-main); font-size: 0.82rem; font-family: inherit; resize: vertical;"></textarea>
                 </div>
                 <button type="submit" class="submit-profile-btn" style="padding: 8px 12px; font-size: 0.82rem; height: auto; margin-top: 5px; background: var(--color-teal); border: none; border-radius: var(--radius-sm); color: #fff; font-weight: bold; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 6px;">
                     <i class="fa-solid fa-paper-plane"></i> Submit Request
                 </button>
             </form>
         `;
-        
-        // Add form listener
+    }
+
+    cardBody.innerHTML = `
+        ${statusContent}
+        <div class="verif-tracker" style="display: flex; flex-direction: column; gap: 10px; margin-top: 15px; padding-top: 15px; border-top: 1px solid var(--border-color);">
+            <h5 style="margin: 0; font-size: 0.72rem; font-weight: 800; color: var(--text-label); text-transform: uppercase; letter-spacing: 0.03em;">Verification Tracker</h5>
+            <div style="display: flex; flex-direction: column; gap: 10px; position: relative; padding-left: 5px;">
+                <div style="display: flex; align-items: center; gap: 10px; font-size: 0.78rem;">
+                    <div style="display:flex; align-items:center; justify-content:center; width: 16px;">${step1Icon}</div>
+                    <span style="color: ${step1Color}; font-weight: ${step1Class === 'step-done' ? '700' : 'normal'}">1. Profile Details & Affiliation</span>
+                </div>
+                <div style="display: flex; align-items: center; gap: 10px; font-size: 0.78rem;">
+                    <div style="display:flex; align-items:center; justify-content:center; width: 16px;">${step2Icon}</div>
+                    <span style="color: ${step2Color}; font-weight: ${step2Class === 'step-active' ? '700' : 'normal'}">2. Institutional Email Check</span>
+                </div>
+                <div style="display: flex; align-items: center; gap: 10px; font-size: 0.78rem;">
+                    <div style="display:flex; align-items:center; justify-content:center; width: 16px;">${step3Icon}</div>
+                    <span style="color: ${step3Color}; font-weight: ${step3Class === 'step-done' ? '700' : 'normal'}">3. Admin Credential Approval</span>
+                </div>
+            </div>
+        </div>
+    `;
+
+    if (!isVerified && !pendingRequest) {
         document.getElementById('submit-verification-form')?.addEventListener('submit', async function(e) {
             e.preventDefault();
             const affiliation = document.getElementById('verif-affiliation').value.trim();
@@ -3518,7 +3646,6 @@ function renderVerificationStatusCard() {
                     const { error } = await supabase.from('verifications').insert([newRequest]);
                     if (error) throw error;
                 } else {
-                    // Fallback to local memory mock state
                     if (!STATE.verifications) STATE.verifications = [];
                     STATE.verifications.push({
                         id: Math.floor(Math.random() * 1000) + 100,
@@ -3740,7 +3867,52 @@ function renderGlobalOpportunities() {
     if (!DOM.globalOppsList) return;
     
     let filteredOpps = STATE.opportunities;
-    
+    const activeType = STATE.oppTypeFilter || 'all';
+
+    if (activeType === 'session') {
+        let openSessions = (STATE.sessions || []).filter(s => s.student === 'Open Reservation');
+        
+        if (STATE.searchQuery) {
+            openSessions = openSessions.filter(s => 
+                s.topic.toLowerCase().includes(STATE.searchQuery) ||
+                (s.mentor_name || '').toLowerCase().includes(STATE.searchQuery)
+            );
+        }
+        
+        const container = DOM.globalOppsList;
+        container.innerHTML = '';
+        if (openSessions.length === 0) {
+            container.innerHTML = `<tr><td colspan="7" style="text-align:center; padding: 40px; color: var(--text-muted);">No matching mentorship sessions found.</td></tr>`;
+            return;
+        }
+        
+        openSessions.forEach(sess => {
+            const isConsulting = sess.type === 'consulting';
+            const priceText = (sess.price_credits && sess.price_credits > 0) ? `${sess.price_credits} Credits` : 'Free';
+            const tr = document.createElement('tr');
+            tr.innerHTML = `
+                <td><strong>${sess.topic}</strong></td>
+                <td>
+                    <div class="dir-title-row">
+                        <span>${sess.mentor_name || 'Verified Mentor'}</span>
+                        <span style="font-size:0.75rem;color:var(--text-muted)">Academic Mentor</span>
+                    </div>
+                </td>
+                <td><span class="badge-tag label-purple">${isConsulting ? 'Consulting' : 'Mentorship'}</span></td>
+                <td><code style="font-size:0.75rem"><i class="fa-regular fa-calendar"></i> ${sess.date}</code></td>
+                <td>${sess.platform || 'Zoom'}</td>
+                <td>${priceText}</td>
+                <td class="action-column">
+                    <button class="action-btn primary-btn" onclick="window.bookMentorshipSession(${sess.id})">
+                        <i class="fa-solid fa-calendar-check"></i> Book Session
+                    </button>
+                </td>
+            `;
+            container.appendChild(tr);
+        });
+        return;
+    }
+
     // Apply Search
     if (STATE.searchQuery) {
         filteredOpps = filteredOpps.filter(opp => 
@@ -3757,6 +3929,14 @@ function renderGlobalOpportunities() {
         );
     }
 
+    // Apply Type Filter
+    if (activeType !== 'all') {
+        filteredOpps = filteredOpps.filter(opp => {
+            const oppType = opp.type || 'project';
+            return oppType === activeType;
+        });
+    }
+
     const container = DOM.globalOppsList;
     container.innerHTML = '';
 
@@ -3767,6 +3947,14 @@ function renderGlobalOpportunities() {
 
     filteredOpps.forEach(opp => {
         const tr = document.createElement('tr');
+        
+        let detailsText = `${opp.slots} slots`;
+        if (opp.type === 'fellowship') {
+            detailsText = `<span style="color:var(--color-emerald); font-weight:700;">${opp.stipend || 'Stipend'}</span>`;
+        } else if (opp.type === 'problem') {
+            detailsText = `<span style="color:var(--color-orange); font-weight:700;">Bounty: ${opp.price_credits || 0} Cr</span>`;
+        }
+
         tr.innerHTML = `
             <td><strong>${opp.title}</strong></td>
             <td>
@@ -3778,7 +3966,7 @@ function renderGlobalOpportunities() {
             <td><span class="badge-tag label-blue">${opp.domain}</span></td>
             <td><code style="font-size:0.75rem">${opp.skills}</code></td>
             <td>${opp.duration}</td>
-            <td>${opp.slots} slots</td>
+            <td>${detailsText}</td>
             <td class="action-column">
                 <button class="action-btn ${opp.applied ? 'outline-btn' : 'primary-btn'}" onclick="applyToOpportunity(${opp.id})" ${opp.applied ? 'disabled' : ''}>
                     ${opp.applied ? '<i class="fa-solid fa-circle-check"></i> Applied' : '<i class="fa-solid fa-paper-plane"></i> Apply'}
@@ -3906,7 +4094,57 @@ function renderDashboardOpportunities() {
 
     if (role === 'student') {
         let filteredOpps = STATE.opportunities;
-        
+        const activeType = STATE.oppTypeFilter || 'all';
+
+        if (activeType === 'session') {
+            let openSessions = (STATE.sessions || []).filter(s => s.student === 'Open Reservation');
+            if (STATE.searchQuery) {
+                openSessions = openSessions.filter(s => 
+                    s.topic.toLowerCase().includes(STATE.searchQuery) ||
+                    (s.mentor_name || '').toLowerCase().includes(STATE.searchQuery)
+                );
+            }
+
+            if (openSessions.length === 0) {
+                DOM.oppEmptyState.classList.remove('hidden');
+                DOM.opportunitiesTable.classList.add('hidden');
+                return;
+            }
+
+            document.querySelector('#opportunities-table thead').innerHTML = `
+                <tr>
+                    <th>SESSION TOPIC</th>
+                    <th>MENTOR</th>
+                    <th>TYPE</th>
+                    <th>DATE & TIME</th>
+                    <th>MEDIUM</th>
+                    <th>PRICE</th>
+                    <th class="action-column">ACTION</th>
+                </tr>
+            `;
+
+            openSessions.forEach(sess => {
+                const tr = document.createElement('tr');
+                const priceText = (sess.price_credits && sess.price_credits > 0) ? `${sess.price_credits} Credits` : 'Free';
+                tr.innerHTML = `
+                    <td><strong>${sess.topic}</strong></td>
+                    <td>${sess.mentor_name || 'Verified Mentor'}</td>
+                    <td><span class="badge-tag label-purple">${sess.type === 'consulting' ? 'Consulting' : 'Mentorship'}</span></td>
+                    <td><code style="font-size:0.75rem">${sess.date}</code></td>
+                    <td>${sess.platform || 'Zoom'}</td>
+                    <td>${priceText}</td>
+                    <td class="action-column">
+                        <button class="action-btn primary-btn" onclick="window.bookMentorshipSession(${sess.id})">
+                            <i class="fa-solid fa-calendar-check"></i> Book
+                        </button>
+                    </td>
+                `;
+                listContainer.appendChild(tr);
+            });
+            return;
+        }
+
+        // Apply Search
         if (STATE.searchQuery) {
             filteredOpps = filteredOpps.filter(opp => 
                 opp.title.toLowerCase().includes(STATE.searchQuery) ||
@@ -3918,6 +4156,14 @@ function renderDashboardOpportunities() {
             filteredOpps = filteredOpps.filter(opp => 
                 opp.domain.toLowerCase().includes(STATE.selectedDomain.toLowerCase())
             );
+        }
+
+        // Apply Type Filter
+        if (activeType !== 'all') {
+            filteredOpps = filteredOpps.filter(opp => {
+                const oppType = opp.type || 'project';
+                return oppType === activeType;
+            });
         }
 
         if (filteredOpps.length === 0) {
@@ -3933,13 +4179,21 @@ function renderDashboardOpportunities() {
                 <th>DOMAIN</th>
                 <th>REQUIRED SKILLS</th>
                 <th>DURATION</th>
-                <th>SLOTS</th>
+                <th>SLOTS / DETAILS</th>
                 <th class="action-column">ACTION</th>
             </tr>
         `;
 
         filteredOpps.forEach(opp => {
             const tr = document.createElement('tr');
+            
+            let detailsText = `${opp.slots} slots`;
+            if (opp.type === 'fellowship') {
+                detailsText = `<div style="font-size:0.75rem; color:var(--color-emerald); font-weight:700;">${opp.stipend || 'Stipend'}</div>`;
+            } else if (opp.type === 'problem') {
+                detailsText = `<div style="font-size:0.75rem; color:var(--color-orange); font-weight:700;">Bounty: ${opp.price_credits || 0} Cr</div>`;
+            }
+
             tr.innerHTML = `
                 <td><strong>${opp.title}</strong></td>
                 <td>
@@ -3951,7 +4205,7 @@ function renderDashboardOpportunities() {
                 <td><span class="badge-tag label-blue">${opp.domain}</span></td>
                 <td><code style="font-size:0.75rem">${opp.skills}</code></td>
                 <td>${opp.duration}</td>
-                <td>${opp.slots} slots</td>
+                <td>${detailsText}</td>
                 <td class="action-column">
                     <button class="action-btn ${opp.applied ? 'outline-btn' : 'primary-btn'}" onclick="applyToOpportunity(${opp.id})" ${opp.applied ? 'disabled' : ''}>
                         ${opp.applied ? '<i class="fa-solid fa-circle-check"></i> Applied' : '<i class="fa-solid fa-paper-plane"></i> Apply'}
@@ -3985,12 +4239,15 @@ function renderDashboardOpportunities() {
                         ${app.status}
                     </span>
                 </td>
-                <td class="action-column">
+                <td class="action-column" style="display: flex; gap: 6px; align-items: center; justify-content: flex-end;">
+                    <button class="action-btn outline-btn" onclick="window.viewApplicantResume(${app.id})" style="font-size: 0.75rem; padding: 4px 8px; margin-bottom: 0;">
+                        <i class="fa-solid fa-file-pdf"></i> Resume
+                    </button>
                     ${app.status === 'Pending' ? `
-                        <button class="action-btn primary-btn" style="background-color:var(--color-emerald)" onclick="approveApplicant(${app.id})">Approve</button>
-                        <button class="action-btn outline-btn" style="color:var(--color-red); border-color:var(--color-red)" onclick="rejectApplicant(${app.id})">Decline</button>
+                        <button class="action-btn primary-btn" style="background-color:var(--color-emerald); font-size: 0.75rem; padding: 4px 8px; margin-bottom: 0;" onclick="approveApplicant(${app.id})">Approve</button>
+                        <button class="action-btn outline-btn" style="color:var(--color-red); border-color:var(--color-red); font-size: 0.75rem; padding: 4px 8px; margin-bottom: 0;" onclick="rejectApplicant(${app.id})">Decline</button>
                     ` : `
-                        <button class="action-btn outline-btn" disabled>Processed</button>
+                        <button class="action-btn outline-btn" style="font-size: 0.75rem; padding: 4px 8px; margin-bottom: 0;" disabled>Processed</button>
                     `}
                 </td>
             `;
@@ -4159,8 +4416,13 @@ function renderDashboardLearning() {
         const card = document.createElement('div');
         card.className = 'course-card';
 
+        const isPaidAndLocked = course.is_paid && course.progress === 0;
+
         card.innerHTML = `
-            <span class="course-cat">${course.category}</span>
+            <span class="tel-category-row" style="display:flex; justify-content:space-between; align-items:center; width:100%; margin-bottom:5px;">
+                <span class="course-cat">${course.category}</span>
+                ${course.is_paid ? `<span class="badge-tel label-orange" style="font-size:0.65rem; padding: 2px 6px; border-radius:10px; font-weight:bold;">PREMIUM: ${course.price_credits} CR</span>` : `<span class="badge-tel label-green" style="font-size:0.65rem; padding: 2px 6px; border-radius:10px; font-weight:bold;">FREE</span>`}
+            </span>
             <h4 class="course-title">${course.title}</h4>
             <div class="course-meta">
                 <span>${course.duration}</span>
@@ -4176,7 +4438,7 @@ function renderDashboardLearning() {
                 </div>
             </div>
             <button class="action-btn ${course.progress === 100 ? 'outline-btn' : 'primary-btn'} course-btn" onclick="startCourse(${course.id})">
-                ${course.progress === 100 ? 'Review Certificate' : 'Resume Learning'}
+                ${course.progress === 100 ? 'Review Certificate' : (isPaidAndLocked ? `<i class="fa-solid fa-lock"></i> Unlock (${course.price_credits} Credits)` : 'Resume Learning')}
             </button>
         `;
         grid.appendChild(card);
@@ -4427,8 +4689,108 @@ window.likePost = async (id) => {
 
 window.startCourse = async (id) => {
     const course = STATE.courses.find(c => c.id === id);
-    if (course) {
-        if (course.progress === 100) {
+    if (!course) return;
+
+    if (course.is_paid && course.progress === 0) {
+        const confirmUnlock = confirm(`This premium course costs ${course.price_credits} credits. Do you want to unlock it?`);
+        if (!confirmUnlock) return;
+
+        if (STATE.user.credits < course.price_credits) {
+            showToast(`❌ Insufficient credits. You need ${course.price_credits} credits (Current balance: ${STATE.user.credits}).`);
+            return;
+        }
+
+        const oldStudentCredits = STATE.user.credits;
+        const newStudentCredits = oldStudentCredits - course.price_credits;
+        STATE.user.credits = newStudentCredits;
+
+        let creatorProfile = null;
+        let newCreatorCredits = 0;
+        if (course.creator_id) {
+            creatorProfile = (STATE.allProfiles || []).find(p => p.user_id === course.creator_id);
+        } else if (course.creator_name) {
+            creatorProfile = (STATE.allProfiles || []).find(p => p.name === course.creator_name);
+        }
+
+        if (creatorProfile) {
+            newCreatorCredits = (creatorProfile.credits || 0) + course.price_credits;
+            creatorProfile.credits = newCreatorCredits;
+        }
+
+        if (supabase) {
+            try {
+                const { error: studentErr } = await supabase.from('profiles').update({ credits: newStudentCredits }).eq('id', STATE.user.id);
+                if (studentErr) throw studentErr;
+
+                if (creatorProfile) {
+                    const { error: creatorErr } = await supabase.from('profiles').update({ credits: newCreatorCredits }).eq('id', creatorProfile.id);
+                    if (creatorErr) throw creatorErr;
+                }
+
+                const { error: courseErr } = await supabase.from('courses').update({ progress: 25 }).eq('id', id);
+                if (courseErr) throw courseErr;
+
+                showToast(`✅ Unlocked course! ${course.price_credits} credits transferred to creator.`);
+                await loadDataFromSupabase();
+            } catch (e) {
+                console.error("Error unlocking course:", e);
+                showToast("❌ Transaction failed: " + e.message);
+                STATE.user.credits = oldStudentCredits;
+                if (creatorProfile) creatorProfile.credits -= course.price_credits;
+                return;
+            }
+        } else {
+            if (creatorProfile) {
+                creatorProfile.credits = newCreatorCredits;
+            }
+            course.progress = 25;
+            showToast(`✅ Unlocked course locally! ${course.price_credits} credits transferred.`);
+        }
+
+        renderAllPageContents();
+        updateDashboardUI();
+        return;
+    }
+
+    if (course.progress === 100) {
+        // Populate and show certificate modal
+        document.getElementById('cert-student-name').textContent = STATE.user.name || "BioLabs Student";
+        document.getElementById('cert-course-title').textContent = course.title;
+        
+        // Format current date
+        const options = { year: 'numeric', month: 'long', day: 'numeric' };
+        const today = new Date().toLocaleDateString('en-US', options);
+        document.getElementById('cert-date').textContent = today;
+        
+        // Generate pseudo-verification hash
+        const pseudoInput = (STATE.user.name + course.title).toUpperCase().replace(/[^A-Z0-9]/g, '');
+        let hash = 0;
+        for (let i = 0; i < pseudoInput.length; i++) {
+            hash = (hash << 5) - hash + pseudoInput.charCodeAt(i);
+            hash |= 0;
+        }
+        const hashHex = "BL-" + Math.abs(hash).toString(16).padStart(8, '0').toUpperCase();
+        document.getElementById('cert-hash').textContent = hashHex;
+        
+        openInfoModal('modal-certificate');
+    } else {
+        const nextProgress = Math.min(course.progress + 25, 100);
+        if (supabase) {
+            try {
+                const { error } = await supabase.from('courses').update({ progress: nextProgress }).eq('id', id);
+                if (error) throw error;
+                await loadDataFromSupabase();
+            } catch (e) {
+                console.error("Error updating course progress in Supabase:", e);
+            }
+        } else {
+            course.progress = nextProgress;
+        }
+        showToast(`Module complete! Course progress updated.`);
+        renderAllPageContents();
+        updateDashboardUI();
+        
+        if (nextProgress === 100) {
             // Populate and show certificate modal
             document.getElementById('cert-student-name').textContent = STATE.user.name || "BioLabs Student";
             document.getElementById('cert-course-title').textContent = course.title;
@@ -4448,46 +4810,7 @@ window.startCourse = async (id) => {
             const hashHex = "BL-" + Math.abs(hash).toString(16).padStart(8, '0').toUpperCase();
             document.getElementById('cert-hash').textContent = hashHex;
             
-            openInfoModal('modal-certificate');
-        } else {
-            const nextProgress = Math.min(course.progress + 25, 100);
-            if (supabase) {
-                try {
-                    const { error } = await supabase.from('courses').update({ progress: nextProgress }).eq('id', id);
-                    if (error) throw error;
-                    await loadDataFromSupabase();
-                } catch (e) {
-                    console.error("Error updating course progress in Supabase:", e);
-                }
-            } else {
-                course.progress = nextProgress;
-            }
-            showToast(`Module complete! Course progress updated.`);
-            renderAllPageContents();
-            updateDashboardUI();
-            
-            if (nextProgress === 100) {
-                // Populate and show certificate modal
-                document.getElementById('cert-student-name').textContent = STATE.user.name || "BioLabs Student";
-                document.getElementById('cert-course-title').textContent = course.title;
-                
-                // Format current date
-                const options = { year: 'numeric', month: 'long', day: 'numeric' };
-                const today = new Date().toLocaleDateString('en-US', options);
-                document.getElementById('cert-date').textContent = today;
-                
-                // Generate pseudo-verification hash
-                const pseudoInput = (STATE.user.name + course.title).toUpperCase().replace(/[^A-Z0-9]/g, '');
-                let hash = 0;
-                for (let i = 0; i < pseudoInput.length; i++) {
-                    hash = (hash << 5) - hash + pseudoInput.charCodeAt(i);
-                    hash |= 0;
-                }
-                const hashHex = "BL-" + Math.abs(hash).toString(16).padStart(8, '0').toUpperCase();
-                document.getElementById('cert-hash').textContent = hashHex;
-                
-                setTimeout(() => openInfoModal('modal-certificate'), 800);
-            }
+            setTimeout(() => openInfoModal('modal-certificate'), 800);
         }
     }
 };
@@ -5599,7 +5922,8 @@ document.addEventListener('click', (e) => {
     const infoModals = [
         'modal-sponsors','modal-workshops','modal-university',
         'modal-hiring','modal-security','modal-terms',
-        'modal-ugc','modal-partnership','modal-certificate','modal-student-quiz'
+        'modal-ugc','modal-partnership','modal-certificate','modal-student-quiz',
+        'modal-resume-viewer'
     ];
     infoModals.forEach(id => {
         const modal = document.getElementById(id);
@@ -5628,6 +5952,161 @@ window.submitPartnershipForm = function(e) {
     showToast(`Partnership inquiry from ${name} (${org}) sent to partners@biolabs.in!`);
     document.getElementById('partnership-contact-form')?.reset();
     closeInfoModal('modal-partnership');
+};
+
+// --- STAGE 3: OPPORTUNITY TOGGLE AND TRANSACTIONS ---
+window.toggleOpportunityFormFields = function() {
+    const projType = document.getElementById('proj-type')?.value;
+    const fellowshipExtra = document.getElementById('opp-fellowship-extra');
+    const problemExtra = document.getElementById('opp-problem-extra');
+    if (!projType) return;
+    
+    if (projType === 'fellowship') {
+        if (fellowshipExtra) fellowshipExtra.style.display = 'block';
+        if (problemExtra) problemExtra.style.display = 'none';
+    } else if (projType === 'problem') {
+        if (fellowshipExtra) fellowshipExtra.style.display = 'none';
+        if (problemExtra) problemExtra.style.display = 'block';
+    } else {
+        if (fellowshipExtra) fellowshipExtra.style.display = 'none';
+        if (problemExtra) problemExtra.style.display = 'none';
+    }
+};
+
+window.filterOpportunitiesByType = function(type, btn) {
+    STATE.oppTypeFilter = type;
+    
+    const tabs = document.querySelectorAll('.opp-type-tab');
+    tabs.forEach(t => {
+        if (t.getAttribute('data-type') === type) {
+            t.classList.add('active');
+        } else {
+            t.classList.remove('active');
+        }
+    });
+
+    renderGlobalOpportunities();
+    renderDashboardOpportunities();
+};
+
+window.viewApplicantResume = async function(appId) {
+    const applicant = STATE.applicants.find(a => a.id === appId);
+    if (!applicant) {
+        showToast("❌ Applicant not found.");
+        return;
+    }
+    
+    let resumeUrl = '';
+    const profile = (STATE.allProfiles || []).find(p => p.name === applicant.name);
+    if (profile) {
+        resumeUrl = profile.resume_url;
+    }
+
+    if (!resumeUrl && supabase) {
+        try {
+            const { data } = await supabase.from('profiles').select('resume_url').eq('name', applicant.name).single();
+            if (data) resumeUrl = data.resume_url;
+        } catch (e) {
+            console.error("Error fetching applicant resume:", e);
+        }
+    }
+
+    const bodyEl = document.getElementById('resume-viewer-body');
+    const titleEl = document.getElementById('resume-viewer-title');
+    
+    if (titleEl) {
+        titleEl.textContent = `${applicant.name}'s Resume Preview`;
+    }
+    
+    if (bodyEl) {
+        if (resumeUrl) {
+            bodyEl.innerHTML = `<iframe src="${resumeUrl}" style="width: 100%; height: 100%; border: none;"></iframe>`;
+        } else {
+            bodyEl.innerHTML = `
+                <div style="padding: 40px; text-align: center; color: var(--text-muted); display:flex; flex-direction:column; gap:10px; align-items:center; justify-content:center; width:100%; height:100%;">
+                    <i class="fa-solid fa-file-excel" style="font-size: 2.5rem; color:var(--color-red);"></i>
+                    <p style="margin:0; font-weight:700;">No resume uploaded by this student.</p>
+                </div>
+            `;
+        }
+    }
+
+    window.openInfoModal('modal-resume-viewer');
+};
+
+window.bookMentorshipSession = async function(sessionId) {
+    if (!requireAuth('Sign in to book mentorship sessions.')) return;
+
+    const session = STATE.sessions.find(s => s.id === sessionId);
+    if (!session) return;
+
+    const price = session.price_credits || 0;
+    const confirmBook = confirm(`Do you want to book this session for ${price > 0 ? price + ' credits' : 'free'}?`);
+    if (!confirmBook) return;
+
+    if (price > 0 && STATE.user.credits < price) {
+        showToast(`❌ Insufficient credits. You need ${price} credits.`);
+        return;
+    }
+
+    const oldCredits = STATE.user.credits;
+    const newStudentCredits = oldCredits - price;
+    
+    let mentorProfile = null;
+    let newMentorCredits = 0;
+    
+    if (session.mentor_id) {
+        mentorProfile = (STATE.allProfiles || []).find(p => p.user_id === session.mentor_id);
+    } else if (session.mentor_name) {
+        mentorProfile = (STATE.allProfiles || []).find(p => p.name === session.mentor_name);
+    }
+
+    if (mentorProfile) {
+        newMentorCredits = (mentorProfile.credits || 0) + price;
+    }
+
+    if (supabase) {
+        try {
+            const { error: sessionErr } = await supabase.from('mentorship_sessions')
+                .update({ 
+                    student: STATE.user.name, 
+                    status: 'Scheduled',
+                    platform: 'Google Meet / Zoom'
+                })
+                .eq('id', sessionId);
+            if (sessionErr) throw sessionErr;
+
+            if (price > 0) {
+                const { error: studentErr } = await supabase.from('profiles').update({ credits: newStudentCredits }).eq('id', STATE.user.id);
+                if (studentErr) throw studentErr;
+
+                if (mentorProfile) {
+                    const { error: mentorErr } = await supabase.from('profiles').update({ credits: newMentorCredits }).eq('id', mentorProfile.id);
+                    if (mentorErr) throw mentorErr;
+                }
+            }
+
+            showToast(`✅ Session booked successfully!`);
+            await loadDataFromSupabase();
+        } catch (e) {
+            console.error("Error booking session:", e);
+            showToast("❌ Booking failed: " + e.message);
+            return;
+        }
+    } else {
+        session.student = STATE.user.name;
+        session.status = 'Scheduled';
+        if (price > 0) {
+            STATE.user.credits = newStudentCredits;
+            if (mentorProfile) {
+                mentorProfile.credits = newMentorCredits;
+            }
+        }
+        showToast(`✅ Session booked locally!`);
+    }
+
+    renderAllPageContents();
+    updateDashboardUI();
 };
 
 // Start execution on window load

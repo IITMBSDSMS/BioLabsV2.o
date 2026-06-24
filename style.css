@@ -4519,5 +4519,52 @@ input, select, textarea, button {
     transform: translateY(0);
 }
 
+/* Certificate Print Styles */
+@media print {
+    body * {
+        visibility: hidden !important;
+    }
+    #modal-certificate, #modal-certificate * {
+        visibility: visible !important;
+    }
+    #modal-certificate {
+        position: absolute !important;
+        left: 0 !important;
+        top: 0 !important;
+        width: 100% !important;
+        height: auto !important;
+        background: #ffffff !important;
+        backdrop-filter: none !important;
+        display: flex !important;
+        align-items: center !important;
+        justify-content: center !important;
+        padding: 0 !important;
+        margin: 0 !important;
+    }
+    .no-print {
+        display: none !important;
+    }
+    #certificate-print-area {
+        border: 12px double #6d28d9 !important;
+        box-shadow: none !important;
+        background: #ffffff !important;
+        color: #000000 !important;
+        width: 100% !important;
+        max-width: 100% !important;
+        margin: 0 !important;
+        padding: 40px !important;
+        border-radius: 0 !important;
+    }
+    #certificate-print-area * {
+        color: #000000 !important;
+    }
+    #cert-course-title {
+        color: #0d9488 !important; /* Teal fallback for print */
+    }
+    #cert-hash {
+        color: #6d28d9 !important;
+    }
+}
+
 
 

@@ -652,7 +652,9 @@ async function loadDataFromSupabase() {
                 type: v.type,
                 affiliation: v.affiliation,
                 bio: v.bio,
-                status: v.status
+                status: v.status,
+                user_id: v.user_id,
+                email: v.email
             }));
         }
 
@@ -666,7 +668,9 @@ async function loadDataFromSupabase() {
                 title: c.title,
                 duration: c.duration,
                 modules: c.modules,
-                progress: c.progress
+                progress: c.progress,
+                creator_name: c.creator_name,
+                creator_id: c.creator_id
             }));
         }
 
@@ -1715,8 +1719,12 @@ function setupEventListeners() {
     });
 
     // Researcher Project Publisher Flow
-    DOM.researcherActionPanel.addEventListener('submit', (e) => {
+    DOM.researcherActionPanel.addEventListener('submit', async (e) => {
         e.preventDefault();
+        if (!STATE.user.verified) {
+            showToast("❌ Verification Required: Please request profile verification first.");
+            return;
+        }
         const title = document.getElementById('proj-title').value;
         const domain = document.getElementById('proj-domain').value;
         const size = parseInt(document.getElementById('proj-size').value);
@@ -1724,10 +1732,9 @@ function setupEventListeners() {
         const skills = document.getElementById('proj-skills').value;
         
         const newProj = {
-            id: STATE.opportunities.length + 1,
             title: title,
             researcher: STATE.user.loggedIn ? STATE.user.name : "Dr. Samir Kalra",
-            lab: STATE.user.loggedIn ? "Primary Investigator Lab" : "BioAI Research Lab",
+            lab: STATE.user.loggedIn ? STATE.user.institution : "BioAI Research Lab",
             domain: domain,
             skills: skills,
             duration: duration,
@@ -1735,25 +1742,36 @@ function setupEventListeners() {
             applied: false
         };
 
-        STATE.opportunities.unshift(newProj);
-        showToast(`Project '${title}' published! Sent to verification queue.`);
+        if (supabase) {
+            const { error } = await supabase.from('opportunities').insert([newProj]);
+            if (error) {
+                showToast("❌ Failed to publish project: " + error.message);
+                return;
+            }
+        }
+
+        showToast(`Project '${title}' published successfully!`);
         DOM.researcherActionPanel.reset();
         
+        await loadDataFromSupabase();
         switchTab('opportunities');
         renderAllPageContents();
         updateDashboardUI();
     });
 
     // Mentor Schedule Session Flow
-    DOM.mentorActionPanel.addEventListener('submit', (e) => {
+    DOM.mentorActionPanel.addEventListener('submit', async (e) => {
         e.preventDefault();
+        if (!STATE.user.verified) {
+            showToast("❌ Verification Required: Please request profile verification first.");
+            return;
+        }
         const title = document.getElementById('session-title').value;
         const type = document.getElementById('session-type').value;
         const dateInput = document.getElementById('session-date').value;
         const dateString = new Date(dateInput).toLocaleString();
         
         const newSession = {
-            id: STATE.sessions.length + 200,
             student: "Open Reservation",
             topic: `${type}: ${title}`,
             date: dateString,
@@ -1761,10 +1779,18 @@ function setupEventListeners() {
             status: "Scheduled"
         };
         
-        STATE.sessions.unshift(newSession);
+        if (supabase) {
+            const { error } = await supabase.from('mentorship_sessions').insert([newSession]);
+            if (error) {
+                showToast("❌ Failed to schedule session: " + error.message);
+                return;
+            }
+        }
+
         showToast(`Session on '${title}' scheduled successfully!`);
         DOM.mentorActionPanel.reset();
         
+        await loadDataFromSupabase();
         switchTab('opportunities');
         renderAllPageContents();
         updateDashboardUI();
@@ -2104,6 +2130,61 @@ function setupEventListeners() {
                 reader.readAsDataURL(file);
             });
         }
+
+        // Course Creator Form Submit Handler
+        const createCourseForm = document.getElementById('create-course-form');
+        if (createCourseForm) {
+            createCourseForm.addEventListener('submit', async (e) => {
+                e.preventDefault();
+                if (!STATE.user.verified) {
+                    showToast("❌ Verification Required: Please request profile verification first.");
+                    return;
+                }
+                const title = document.getElementById('course-title').value.trim();
+                const category = document.getElementById('course-category').value;
+                const duration = document.getElementById('course-duration').value.trim();
+                const modules = parseInt(document.getElementById('course-modules').value);
+
+                if (!title || !duration || !modules) return;
+
+                const submitBtn = e.target.querySelector('button[type="submit"]');
+                if (submitBtn) {
+                    submitBtn.disabled = true;
+                    submitBtn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Publishing...';
+                }
+
+                try {
+                    const newCourse = {
+                        category,
+                        title,
+                        duration,
+                        modules,
+                        progress: 0,
+                        creator_name: STATE.user.name,
+                        creator_id: STATE.user.supabaseUid || null
+                    };
+
+                    if (supabase) {
+                        const { error } = await supabase.from('courses').insert([newCourse]);
+                        if (error) throw error;
+                    }
+
+                    showToast(`🎉 Course '${title}' published successfully!`);
+                    createCourseForm.reset();
+                    await loadDataFromSupabase();
+                    updateDashboardUI();
+                    renderAllPageContents();
+                } catch (err) {
+                    console.error("Error creating course:", err);
+                    showToast("❌ Failed to publish course: " + err.message);
+                } finally {
+                    if (submitBtn) {
+                        submitBtn.disabled = false;
+                        submitBtn.innerHTML = '<i class="fa-solid fa-plus"></i> Publish Course';
+                    }
+                }
+            });
+        }
     }
 }
 
@@ -2252,6 +2333,14 @@ async function handleRealAuthSession(session) {
             if (error || !profile) {
                 // Profile doesn't exist yet — create one with defaults from user metadata
                 const meta = user.user_metadata || {};
+                const refCode = meta.referral_code || '';
+                const baseCredits = (refCode && refCode.trim() !== '') ? 75 : 50;
+
+                // Generate a personal ambassador code
+                const nameClean = (meta.full_name || 'USER').replace(/[^a-zA-Z0-9]/g, '').substring(0, 4).toUpperCase();
+                const randomDigits = Math.floor(100 + Math.random() * 900);
+                const personalAmbCode = `AMB-${nameClean}-${randomDigits}`;
+
                 const newProfile = {
                     user_id: user.id,
                     email: user.email || '',
@@ -2263,7 +2352,9 @@ async function handleRealAuthSession(session) {
                     skills: [],
                     interests: '',
                     streak: 1,
-                    credits: 50
+                    credits: baseCredits,
+                    referred_by_code: refCode,
+                    personal_ambassador_code: personalAmbCode
                 };
 
                 const { data: created } = await supabase.from('profiles').insert([newProfile]).select().single();
@@ -2282,6 +2373,9 @@ async function handleRealAuthSession(session) {
             STATE.user.credits = profile.credits || 50;
             STATE.user.streak = profile.streak || 1;
             STATE.user.avatarUrl = profile.avatar_url || '';
+            STATE.user.verified = profile.verified || false;
+            STATE.user.referred_by_code = profile.referred_by_code || '';
+            STATE.user.personal_ambassador_code = profile.personal_ambassador_code || '';
 
             switchActiveRole(profile.role);
             closeAuthModal();
@@ -2354,13 +2448,14 @@ document.getElementById('real-signup-form')?.addEventListener('submit', async fu
     const password = document.getElementById('signup-password').value;
     const role = document.getElementById('signup-role').value;
     const institution = document.getElementById('signup-institution').value.trim();
+    const referralCode = document.getElementById('signup-referral')?.value.trim() || '';
 
     try {
         const { data, error } = await supabase.auth.signUp({
             email,
             password,
             options: {
-                data: { full_name: name, role, institution }
+                data: { full_name: name, role, institution, referral_code: referralCode }
             }
         });
         if (error) throw error;
@@ -3108,11 +3203,18 @@ function updateDashboardUI() {
             tel4 = { name: "Research Score", val: "740 / 1000", pct: 74, status: "Publications impact high" };
             
             microTitleText = "LABORATORY SPECIALTIES & METADATA";
-            bannerHtml = `<div class="banner-border-accent" style="background-color: var(--color-emerald)"></div>
-                          <div class="banner-content">
-                              <i class="fa-solid fa-shield-halved banner-icon" style="color: var(--color-emerald)"></i>
-                              <span>Your profile is currently <strong>verified</strong>. Opportunities published will immediately have the "Verified Principal Investigator" label.</span>
-                          </div>`;
+            {
+                const isVerified = STATE.user.verified;
+                const bannerText = isVerified 
+                    ? `Your profile is currently <strong>verified</strong>. Opportunities published will immediately have the "Verified Principal Investigator" label.`
+                    : `Your profile is currently <strong>unverified</strong>. Please request profile verification in the left panel to unlock publishing permissions.`;
+                const bannerColor = isVerified ? 'var(--color-emerald)' : 'var(--color-orange)';
+                bannerHtml = `<div class="banner-border-accent" style="background-color: ${bannerColor}"></div>
+                              <div class="banner-content">
+                                  <i class="fa-solid fa-shield-halved banner-icon" style="color: ${bannerColor}"></i>
+                                  <span>${bannerText}</span>
+                              </div>`;
+            }
             break;
             
         case 'mentor':
@@ -3123,11 +3225,18 @@ function updateDashboardUI() {
             tel4 = { name: "Contribution Hours", val: "4 / 10 Hrs/Wk", pct: 40, status: "4 hours verified this week" };
             
             microTitleText = "MENTOR SPECIALTIES & AVAILABILITY";
-            bannerHtml = `<div class="banner-border-accent" style="background-color: var(--color-purple)"></div>
-                          <div class="banner-content">
-                              <i class="fa-solid fa-circle-check banner-icon" style="color: var(--color-purple)"></i>
-                              <span>Your mentor profile is fully verified. Set your open slots to match incoming student consultation requests.</span>
-                          </div>`;
+            {
+                const isVerified = STATE.user.verified;
+                const bannerText = isVerified 
+                    ? `Your mentor profile is fully verified. Set your open slots to match incoming student consultation requests.`
+                    : `Your profile is currently <strong>unverified</strong>. Please request profile verification in the left panel to unlock scheduling permissions.`;
+                const bannerColor = isVerified ? 'var(--color-purple)' : 'var(--color-orange)';
+                bannerHtml = `<div class="banner-border-accent" style="background-color: ${bannerColor}"></div>
+                              <div class="banner-content">
+                                  <i class="fa-solid fa-circle-check banner-icon" style="color: ${bannerColor}"></i>
+                                  <span>${bannerText}</span>
+                              </div>`;
+            }
             break;
             
         case 'admin':
@@ -3173,7 +3282,260 @@ function updateDashboardUI() {
 
     // Pre-fill profile forms with current user data
     populateProfileForms();
+
+    // Dynamic cards toggling and rendering
+    const courseCreator = document.getElementById('course-creator-panel');
+    if (courseCreator) {
+        if ((role === 'researcher' || role === 'mentor') && STATE.user.verified) {
+            courseCreator.style.display = 'block';
+        } else {
+            courseCreator.style.display = 'none';
+        }
+    }
+
+    const verifCard = document.getElementById('verification-status-card');
+    if (verifCard) {
+        if (role === 'researcher' || role === 'mentor') {
+            verifCard.style.display = 'block';
+            renderVerificationStatusCard();
+        } else {
+            verifCard.style.display = 'none';
+        }
+    }
+
+    const adminVerifConsole = document.getElementById('admin-verifications-console');
+    if (adminVerifConsole) {
+        if (role === 'admin') {
+            adminVerifConsole.style.display = 'block';
+            renderAdminVerificationsList();
+        } else {
+            adminVerifConsole.style.display = 'none';
+        }
+    }
 }
+
+// --- VERIFICATION REQUESTS AND ADMIN DECISIONS FLOWS ---
+function renderVerificationStatusCard() {
+    const cardBody = document.getElementById('verification-card-body');
+    const badge = document.getElementById('verification-badge');
+    if (!cardBody) return;
+
+    const isVerified = STATE.user.verified;
+    
+    // Find if there is a pending request for the current user
+    const pendingRequest = (STATE.verifications || []).find(v => 
+        (v.user_id && v.user_id === STATE.user.supabaseUid && v.status === 'Pending') ||
+        (v.email && v.email === STATE.user.email && v.status === 'Pending') ||
+        (!v.user_id && v.name === STATE.user.name && v.status === 'Pending')
+    );
+
+    if (isVerified) {
+        if (badge) {
+            badge.textContent = "VERIFIED";
+            badge.className = "badge-tag label-green";
+        }
+        cardBody.innerHTML = `
+            <div style="text-align: center; padding: 15px 0;">
+                <div style="width: 56px; height: 56px; border-radius: 50%; background: rgba(16, 185, 129, 0.1); display: flex; align-items: center; justify-content: center; margin: 0 auto 12px;">
+                    <i class="fa-solid fa-circle-check" style="color: var(--color-emerald); font-size: 2rem;"></i>
+                </div>
+                <h4 style="margin: 0 0 6px; font-weight: 700; color: var(--text-main);">Verified Academic Profile</h4>
+                <p style="font-size: 0.8rem; color: var(--text-muted); margin: 0;">You have full publishing and creation access on BioLabs Research.</p>
+            </div>
+        `;
+    } else if (pendingRequest) {
+        if (badge) {
+            badge.textContent = "PENDING";
+            badge.className = "badge-tag label-orange";
+        }
+        cardBody.innerHTML = `
+            <div style="text-align: center; padding: 15px 0;">
+                <div style="width: 56px; height: 56px; border-radius: 50%; background: rgba(245, 158, 11, 0.1); display: flex; align-items: center; justify-content: center; margin: 0 auto 12px;">
+                    <i class="fa-solid fa-hourglass-half" style="color: var(--color-orange); font-size: 1.8rem;"></i>
+                </div>
+                <h4 style="margin: 0 0 6px; font-weight: 700; color: var(--text-main);">Verification Pending</h4>
+                <p style="font-size: 0.8rem; color: var(--text-muted); margin: 0;">Your request is under admin review. We will notify you at <strong>${STATE.user.email}</strong> once approved.</p>
+            </div>
+        `;
+    } else {
+        if (badge) {
+            badge.textContent = "UNVERIFIED";
+            badge.className = "badge-tag label-red";
+        }
+        cardBody.innerHTML = `
+            <p style="font-size: 0.82rem; color: var(--text-muted); margin-bottom: 12px; line-height: 1.5;">
+                Verify your institutional affiliation to post opportunities, schedule mentorship sessions, and create courses.
+            </p>
+            <form id="submit-verification-form" style="display: flex; flex-direction: column; gap: 10px;">
+                <div class="form-group" style="margin-bottom: 0;">
+                    <label style="font-size: 0.72rem; margin-bottom: 4px;">Institutional Affiliation</label>
+                    <input type="text" id="verif-affiliation" required value="${STATE.user.institution || ''}" placeholder="e.g. AIIMS Delhi / IISc" style="width: 100%; padding: 8px 10px; border-radius: var(--radius-sm); border: 1px solid var(--border-color); background: var(--bg-card); color: var(--text-main); font-size: 0.82rem;">
+                </div>
+                <div class="form-group" style="margin-bottom: 0;">
+                    <label style="font-size: 0.72rem; margin-bottom: 4px;">Short Bio / Research Focus</label>
+                    <textarea id="verif-bio" required rows="2" placeholder="e.g. PI at Neuro-Genetics Division. Focused on genomics." style="width: 100%; padding: 8px 10px; border-radius: var(--radius-sm); border: 1px solid var(--border-color); background: var(--bg-card); color: var(--text-main); font-size: 0.82rem; font-family: inherit; resize: vertical;"></textarea>
+                </div>
+                <button type="submit" class="submit-profile-btn" style="padding: 8px 12px; font-size: 0.82rem; height: auto; margin-top: 5px; background: var(--color-teal); border: none; border-radius: var(--radius-sm); color: #fff; font-weight: bold; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 6px;">
+                    <i class="fa-solid fa-paper-plane"></i> Submit Request
+                </button>
+            </form>
+        `;
+        
+        // Add form listener
+        document.getElementById('submit-verification-form')?.addEventListener('submit', async function(e) {
+            e.preventDefault();
+            const affiliation = document.getElementById('verif-affiliation').value.trim();
+            const bio = document.getElementById('verif-bio').value.trim();
+            const submitBtn = e.target.querySelector('button[type="submit"]');
+            
+            if (!affiliation || !bio) return;
+            
+            if (submitBtn) {
+                submitBtn.disabled = true;
+                submitBtn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Submitting...';
+            }
+            
+            try {
+                const newRequest = {
+                    user_id: STATE.user.supabaseUid || null,
+                    email: STATE.user.email || '',
+                    name: STATE.user.name,
+                    type: STATE.activeRole === 'researcher' ? 'Researcher' : 'Mentor',
+                    affiliation: affiliation,
+                    bio: bio,
+                    status: 'Pending'
+                };
+                
+                if (supabase) {
+                    const { error } = await supabase.from('verifications').insert([newRequest]);
+                    if (error) throw error;
+                } else {
+                    // Fallback to local memory mock state
+                    if (!STATE.verifications) STATE.verifications = [];
+                    STATE.verifications.push({
+                        id: Math.floor(Math.random() * 1000) + 100,
+                        ...newRequest
+                    });
+                }
+                
+                showToast("Verification request submitted successfully!");
+                await loadDataFromSupabase();
+                updateDashboardUI();
+            } catch (err) {
+                console.error("Verification submit error:", err);
+                showToast("❌ Submission failed: " + err.message);
+                if (submitBtn) {
+                    submitBtn.disabled = false;
+                    submitBtn.innerHTML = '<i class="fa-solid fa-paper-plane"></i> Submit Request';
+                }
+            }
+        });
+    }
+}
+
+function renderAdminVerificationsList() {
+    const listBody = document.getElementById('admin-verifications-list');
+    const countBadge = document.getElementById('verifications-pending-count');
+    if (!listBody) return;
+
+    const pending = (STATE.verifications || []).filter(v => v.status === 'Pending');
+    if (countBadge) {
+        countBadge.textContent = `${pending.length} Pending`;
+        countBadge.className = pending.length > 0 ? "badge-tag label-orange" : "badge-tag label-green";
+    }
+
+    if (pending.length === 0) {
+        listBody.innerHTML = `
+            <tr>
+                <td colspan="5" style="text-align: center; color: var(--text-muted); padding: 20px;">
+                    <i class="fa-solid fa-circle-check" style="color: var(--color-emerald); font-size: 1.5rem; margin-bottom: 8px; display: block; margin-left: auto; margin-right: auto;"></i>
+                    No pending profile verification requests.
+                </td>
+            </tr>
+        `;
+        return;
+    }
+
+    listBody.innerHTML = pending.map(v => `
+        <tr>
+            <td style="font-weight: 700; color: var(--text-main);">${v.name}</td>
+            <td><span class="badge-tag ${v.type === 'Researcher' ? 'label-teal' : 'label-purple'}">${v.type.toUpperCase()}</span></td>
+            <td>${v.affiliation}</td>
+            <td style="max-width: 250px; white-space: normal; line-height: 1.4;">${v.bio}</td>
+            <td class="action-column">
+                <div style="display: flex; gap: 6px; justify-content: flex-end;">
+                    <button class="action-btn outline-btn" onclick="handleAdminVerificationDecision(${v.id}, 'Approved')" style="padding: 2px 8px; font-size: 0.75rem; border-color: var(--color-emerald); color: var(--color-emerald); height: 26px; cursor: pointer;">
+                        <i class="fa-solid fa-check"></i> Approve
+                    </button>
+                    <button class="action-btn outline-btn" onclick="handleAdminVerificationDecision(${v.id}, 'Declined')" style="padding: 2px 8px; font-size: 0.75rem; border-color: var(--color-red); color: var(--color-red); height: 26px; cursor: pointer;">
+                        <i class="fa-solid fa-xmark"></i> Decline
+                    </button>
+                </div>
+            </td>
+        </tr>
+    `).join('');
+}
+
+window.handleAdminVerificationDecision = async function(id, decision) {
+    showToast(`Processing decision: ${decision}...`);
+    try {
+        if (supabase) {
+            const { error: verifErr } = await supabase
+                .from('verifications')
+                .update({ status: decision })
+                .eq('id', id);
+            if (verifErr) throw verifErr;
+        } else {
+            const req = (STATE.verifications || []).find(v => v.id == id);
+            if (req) req.status = decision;
+        }
+
+        const request = (STATE.verifications || []).find(v => v.id == id);
+        
+        if (request && decision === 'Approved') {
+            if (supabase) {
+                let profileToUpdate = null;
+                if (request.user_id) {
+                    const { data } = await supabase.from('profiles').select('*').eq('user_id', request.user_id).limit(1);
+                    if (data && data.length > 0) profileToUpdate = data[0];
+                }
+                if (!profileToUpdate && request.email) {
+                    const { data } = await supabase.from('profiles').select('*').eq('email', request.email).limit(1);
+                    if (data && data.length > 0) profileToUpdate = data[0];
+                }
+                if (!profileToUpdate && request.name) {
+                    const { data } = await supabase.from('profiles').select('*').eq('name', request.name).limit(1);
+                    if (data && data.length > 0) profileToUpdate = data[0];
+                }
+
+                if (profileToUpdate) {
+                    const { error: profileErr } = await supabase
+                        .from('profiles')
+                        .update({ verified: true })
+                        .eq('id', profileToUpdate.id);
+                    if (profileErr) throw profileErr;
+                    showToast(`🎉 Profile for ${request.name} successfully verified!`);
+                } else {
+                    console.warn("Could not find matching profile for verification approval:", request);
+                }
+            } else {
+                const profile = (STATE.allProfiles || []).find(p => p.name === request.name);
+                if (profile) {
+                    profile.verified = true;
+                    showToast(`🎉 Profile for ${request.name} successfully verified!`);
+                }
+            }
+        } else {
+            showToast(`Verification request declined.`);
+        }
+
+        await loadDataFromSupabase();
+        updateDashboardUI();
+    } catch (err) {
+        console.error("Error updating verification decision:", err);
+        showToast("❌ Error updating status: " + err.message);
+    }
+};
 
 function renderMicroStats(role) {
     let html = "";
@@ -3959,7 +4321,26 @@ window.startCourse = async (id) => {
     const course = STATE.courses.find(c => c.id === id);
     if (course) {
         if (course.progress === 100) {
-            alert(`Opening verified BioLabs completion certificate for: "${course.title}"`);
+            // Populate and show certificate modal
+            document.getElementById('cert-student-name').textContent = STATE.user.name || "BioLabs Student";
+            document.getElementById('cert-course-title').textContent = course.title;
+            
+            // Format current date
+            const options = { year: 'numeric', month: 'long', day: 'numeric' };
+            const today = new Date().toLocaleDateString('en-US', options);
+            document.getElementById('cert-date').textContent = today;
+            
+            // Generate pseudo-verification hash
+            const pseudoInput = (STATE.user.name + course.title).toUpperCase().replace(/[^A-Z0-9]/g, '');
+            let hash = 0;
+            for (let i = 0; i < pseudoInput.length; i++) {
+                hash = (hash << 5) - hash + pseudoInput.charCodeAt(i);
+                hash |= 0;
+            }
+            const hashHex = "BL-" + Math.abs(hash).toString(16).padStart(8, '0').toUpperCase();
+            document.getElementById('cert-hash').textContent = hashHex;
+            
+            openInfoModal('modal-certificate');
         } else {
             const nextProgress = Math.min(course.progress + 25, 100);
             if (supabase) {
@@ -3976,6 +4357,29 @@ window.startCourse = async (id) => {
             showToast(`Module complete! Course progress updated.`);
             renderAllPageContents();
             updateDashboardUI();
+            
+            if (nextProgress === 100) {
+                // Populate and show certificate modal
+                document.getElementById('cert-student-name').textContent = STATE.user.name || "BioLabs Student";
+                document.getElementById('cert-course-title').textContent = course.title;
+                
+                // Format current date
+                const options = { year: 'numeric', month: 'long', day: 'numeric' };
+                const today = new Date().toLocaleDateString('en-US', options);
+                document.getElementById('cert-date').textContent = today;
+                
+                // Generate pseudo-verification hash
+                const pseudoInput = (STATE.user.name + course.title).toUpperCase().replace(/[^A-Z0-9]/g, '');
+                let hash = 0;
+                for (let i = 0; i < pseudoInput.length; i++) {
+                    hash = (hash << 5) - hash + pseudoInput.charCodeAt(i);
+                    hash |= 0;
+                }
+                const hashHex = "BL-" + Math.abs(hash).toString(16).padStart(8, '0').toUpperCase();
+                document.getElementById('cert-hash').textContent = hashHex;
+                
+                setTimeout(() => openInfoModal('modal-certificate'), 800);
+            }
         }
     }
 };
@@ -4882,7 +5286,7 @@ document.addEventListener('click', (e) => {
     const infoModals = [
         'modal-sponsors','modal-workshops','modal-university',
         'modal-hiring','modal-security','modal-terms',
-        'modal-ugc','modal-partnership'
+        'modal-ugc','modal-partnership','modal-certificate'
     ];
     infoModals.forEach(id => {
         const modal = document.getElementById(id);

@@ -205,6 +205,10 @@
                             <input type="text" id="signup-institution" placeholder="e.g. IIT Delhi / AIIMS" required>
                         </div>
                     </div>
+                    <div class="input-group" style="margin-bottom:0;">
+                        <label for="signup-referral"><i class="fa-solid fa-gift"></i> Campus Ambassador / Referral Code (Optional)</label>
+                        <input type="text" id="signup-referral" placeholder="e.g. AMB-12345" style="width:100%;padding:10px;border-radius:var(--radius-sm);border:1px solid var(--border-color);background:var(--bg-card);color:var(--text-main);height:42px;">
+                    </div>
                     <div id="signup-error" class="auth-error-msg" style="display:none;"></div>
                     <button type="submit" class="auth-submit-btn" style="background:var(--color-teal);" id="signup-submit-btn">
                         <span class="btn-text">Create Account <i class="fa-solid fa-user-plus"></i></span>
@@ -1130,6 +1134,57 @@
         </div>
     </div>
 
+    <!-- MODAL: Course Completion Certificate -->
+    <div id="modal-certificate" class="modal-overlay">
+        <div class="info-page-modal" style="max-width:700px; padding: 24px; background: var(--bg-card); border-radius: var(--radius-md);">
+            <div style="text-align: right; margin-bottom: 12px;" class="no-print">
+                <button onclick="window.print()" class="portal-btn" style="background: var(--color-teal); display: inline-flex; align-items: center; gap: 8px; font-size: 0.85rem; height: 36px; padding: 0 16px;">
+                    <i class="fa-solid fa-print"></i> Print / Save PDF
+                </button>
+                <button onclick="closeInfoModal('modal-certificate')" class="portal-btn outline" style="margin-left: 8px; font-size: 0.85rem; height: 36px; padding: 0 16px;">
+                    Close
+                </button>
+            </div>
+            
+            <div id="certificate-print-area" style="background: var(--bg-card); border: 12px double var(--color-primary); padding: 40px; text-align: center; border-radius: var(--radius-sm); box-shadow: 0 10px 25px rgba(0,0,0,0.1); position: relative; color: var(--text-main);">
+                <!-- Decorative inner borders -->
+                <div style="position: absolute; top: 10px; left: 10px; border: 1px solid var(--border-color); right: 10px; bottom: 10px; pointer-events: none;"></div>
+                
+                <h1 style="font-family: 'Playfair Display', serif; font-size: 2rem; color: var(--color-primary); margin-bottom: 5px; font-weight: 800; text-transform: uppercase; letter-spacing: 2px;">Certificate of Completion</h1>
+                <p style="color: var(--text-muted); font-size: 0.85rem; font-style: italic; margin-top: 5px; margin-bottom: 30px;">BioLabs Research Academic Board & Learning Center</p>
+                
+                <p style="font-size: 0.95rem; margin-bottom: 10px; color: var(--text-main);">This is to certify that</p>
+                <h2 id="cert-student-name" style="font-size: 1.6rem; font-weight: 700; color: var(--text-main); margin-bottom: 15px; text-decoration: underline; text-decoration-color: var(--color-primary);">[Student Name]</h2>
+                
+                <p style="font-size: 0.95rem; max-width: 500px; margin: 0 auto 20px; line-height: 1.6; color: var(--text-main);">
+                    has successfully completed all lectures, assignments, and modules for the advanced academic course:
+                </p>
+                <h3 id="cert-course-title" style="font-size: 1.3rem; font-weight: 700; color: var(--color-teal); margin-bottom: 25px;">[Course Title]</h3>
+                
+                <p style="font-size: 0.85rem; color: var(--text-muted); margin-bottom: 35px;">
+                    Issued on <strong id="cert-date">[Date]</strong> · Verified Profile & Academic Records Ledger
+                </p>
+                
+                <div style="display: flex; justify-content: space-between; align-items: flex-end; margin-top: 40px; border-top: 1px solid var(--border-color); padding-top: 20px;">
+                    <div style="text-align: left; max-width: 250px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">
+                        <span style="font-family: 'Courier New', monospace; font-size: 0.75rem; color: var(--text-muted); display: block;">Verification Hash:</span>
+                        <code id="cert-hash" style="font-family: 'Courier New', monospace; font-size: 0.75rem; font-weight: 700; color: var(--color-primary);">[CERTIFICATE-HASH]</code>
+                    </div>
+                    
+                    <!-- Gold emblem / badge -->
+                    <div style="width: 60px; height: 60px; border-radius: 50%; border: 3px solid var(--color-primary); background: radial-gradient(circle, #fde047 0%, #ca8a04 100%); display: flex; align-items: center; justify-content: center; box-shadow: 0 4px 10px rgba(0,0,0,0.15); margin: 0 10px;">
+                        <i class="fa-solid fa-award" style="color: #fff; font-size: 1.6rem;"></i>
+                    </div>
+
+                    <div style="text-align: right;">
+                        <p style="margin: 0; font-family: 'Playfair Display', serif; font-size: 0.95rem; color: var(--text-main); font-style: italic;">BioLabs Academic Board</p>
+                        <span style="border-top: 1px solid var(--border-color); width: 130px; display: inline-block; margin-top: 5px; font-size: 0.7rem; color: var(--text-muted);">Authorized Signature</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
     <!-- Notification Toast -->
     <div id="toast" class="toast-notification">
         <div class="toast-content">
@@ -1997,6 +2052,20 @@
                             </div>
                         </article>
                         
+                        <!-- Verification Status Card (Researcher & Mentor only) -->
+                        <article class="dashboard-card shadow-sm" id="verification-status-card" style="display: none; margin-top: 20px;">
+                            <div class="card-header">
+                                <div class="header-title">
+                                    <i class="fa-solid fa-user-shield header-icon"></i>
+                                    <h2>PROFILE VERIFICATION</h2>
+                                </div>
+                                <span class="badge-tag label-orange" id="verification-badge">UNVERIFIED</span>
+                            </div>
+                            <div class="card-body" id="verification-card-body">
+                                <!-- Dynamic content loaded via JS -->
+                            </div>
+                        </article>
+                        
                         <!-- Action Card -->
                         <article class="dashboard-card shadow-sm" id="action-card">
                             <div class="card-header">
@@ -2249,6 +2318,45 @@
 
                                 <!-- Tab 4: Learning -->
                                 <div id="tab-content-learning" class="tab-view">
+                                    <!-- Course Creator Panel (Researchers & Mentors only, visible if verified) -->
+                                    <div id="course-creator-panel" style="display: none; background: var(--bg-card); border: 1px solid var(--border-color); border-radius: var(--radius-md); padding: 20px; margin-bottom: 20px;">
+                                        <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 15px; border-bottom: 1px solid var(--border-color); padding-bottom: 8px;">
+                                            <i class="fa-solid fa-graduation-cap" style="color: var(--color-teal); font-size: 1.3rem;"></i>
+                                            <h3 style="margin:0; font-size: 1.1rem; font-weight: 700; color: var(--text-main);">Publish a New Course</h3>
+                                        </div>
+                                        <form id="create-course-form" style="display: flex; flex-direction: column; gap: 12px;">
+                                            <div style="display: flex; gap: 12px; flex-wrap: wrap;">
+                                                <div class="input-group" style="flex: 2; min-width: 200px; margin-bottom: 0;">
+                                                    <label style="font-size: 0.75rem; font-weight: 700; color: var(--text-label); margin-bottom: 4px; display: block;">Course Title</label>
+                                                    <input type="text" id="course-title" required placeholder="e.g. Advanced CRISPR Pathways & Genome Design" style="width: 100%; padding: 8px 10px; border-radius: var(--radius-sm); border: 1px solid var(--border-color); background: var(--bg-card); color: var(--text-main); font-size: 0.85rem;">
+                                                </div>
+                                                <div class="input-group" style="flex: 1; min-width: 130px; margin-bottom: 0;">
+                                                    <label style="font-size: 0.75rem; font-weight: 700; color: var(--text-label); margin-bottom: 4px; display: block;">Category</label>
+                                                    <select id="course-category" style="width: 100%; padding: 8px 10px; border-radius: var(--radius-sm); border: 1px solid var(--border-color); background: var(--bg-card); color: var(--text-main); font-size: 0.85rem; height: 36px;">
+                                                        <option value="Methodology">Methodology</option>
+                                                        <option value="Statistics">Statistics</option>
+                                                        <option value="Scientific Writing">Scientific Writing</option>
+                                                        <option value="Academic Publishing">Academic Publishing</option>
+                                                        <option value="Biology & Genomics">Biology & Genomics</option>
+                                                        <option value="Clinical Diagnostics">Clinical Diagnostics</option>
+                                                    </select>
+                                                </div>
+                                            </div>
+                                            <div style="display: flex; gap: 12px; flex-wrap: wrap;">
+                                                <div class="input-group" style="flex: 1; min-width: 120px; margin-bottom: 0;">
+                                                    <label style="font-size: 0.75rem; font-weight: 700; color: var(--text-label); margin-bottom: 4px; display: block;">Duration</label>
+                                                    <input type="text" id="course-duration" required placeholder="e.g. 4 weeks" style="width: 100%; padding: 8px 10px; border-radius: var(--radius-sm); border: 1px solid var(--border-color); background: var(--bg-card); color: var(--text-main); font-size: 0.85rem;">
+                                                </div>
+                                                <div class="input-group" style="flex: 1; min-width: 120px; margin-bottom: 0;">
+                                                    <label style="font-size: 0.75rem; font-weight: 700; color: var(--text-label); margin-bottom: 4px; display: block;">Number of Modules</label>
+                                                    <input type="number" id="course-modules" required min="1" max="24" value="8" style="width: 100%; padding: 8px 10px; border-radius: var(--radius-sm); border: 1px solid var(--border-color); background: var(--bg-card); color: var(--text-main); font-size: 0.85rem;">
+                                                </div>
+                                            </div>
+                                            <button type="submit" class="portal-btn" style="background: var(--color-teal); align-self: flex-start; padding: 8px 16px; font-size: 0.85rem; height: auto;">
+                                                <i class="fa-solid fa-plus"></i> Publish Course
+                                            </button>
+                                        </form>
+                                    </div>
                                     <div class="learning-grid" id="learning-courses-list">
                                         <!-- Dynamic courses -->
                                     </div>
@@ -2279,6 +2387,30 @@
                                 <!-- Tab 6: Manage Users (Admin Only) -->
                                 <div id="tab-content-manage-users" class="tab-view">
                                     <div style="padding: 20px; display: flex; flex-direction: column; gap: 20px;">
+                                        <!-- Pending Profile Verifications Console Section -->
+                                        <div id="admin-verifications-console" style="background: var(--bg-card); border: 1px solid var(--border-color); border-radius: var(--radius-md); padding: 15px; display: none;">
+                                            <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 12px; border-bottom: 1px solid var(--border-color); padding-bottom: 8px;">
+                                                <i class="fa-solid fa-user-shield" style="color: var(--color-primary); font-size: 1.2rem;"></i>
+                                                <h3 style="margin: 0; font-size: 1.05rem; font-weight: 700; color: var(--text-main);">Pending Profile Verifications</h3>
+                                                <span class="badge-tag label-orange" id="verifications-pending-count" style="margin-left: auto;">0 Pending</span>
+                                            </div>
+                                            <div class="overflow-x">
+                                                <table class="ledger-table" style="font-size: 0.85rem; width: 100%;">
+                                                    <thead>
+                                                        <tr>
+                                                            <th>NAME</th>
+                                                            <th>ROLE / TYPE</th>
+                                                            <th>AFFILIATION</th>
+                                                            <th>BIO / RESEARCH</th>
+                                                            <th class="action-column">DECISION</th>
+                                                        </tr>
+                                                    </thead>
+                                                    <tbody id="admin-verifications-list">
+                                                        <!-- Populated via JS -->
+                                                    </tbody>
+                                                </table>
+                                            </div>
+                                        </div>
                                         <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 15px;">
                                             <div class="search-input-wrapper" style="max-width: 300px; flex: 1;">
                                                 <i class="fa-solid fa-magnifying-glass search-icon"></i>

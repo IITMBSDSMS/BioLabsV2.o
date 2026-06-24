@@ -545,8 +545,14 @@ async function loadDataFromSupabase() {
                 connected: false
             }));
 
-            // Sync current user state if they match one of our seeded users
-            const currentUserProfile = profiles.find(p => p.role === STATE.activeRole);
+            // Sync current user state
+            let currentUserProfile = null;
+            if (STATE.user.loggedIn && STATE.user.supabaseUid) {
+                currentUserProfile = profiles.find(p => p.user_id === STATE.user.supabaseUid);
+            }
+            if (!currentUserProfile) {
+                currentUserProfile = profiles.find(p => p.role === STATE.activeRole);
+            }
             if (currentUserProfile) {
                 STATE.user.id = currentUserProfile.id;
                 STATE.user.name = currentUserProfile.name;
@@ -556,6 +562,9 @@ async function loadDataFromSupabase() {
                 STATE.user.skills = (currentUserProfile.skills || []).join(', ');
                 STATE.user.avatarImg = currentUserProfile.avatar_url;
                 STATE.user.linkedin_url = currentUserProfile.linkedin_url;
+                STATE.user.verified = currentUserProfile.verified || false;
+                STATE.user.resume_url = currentUserProfile.resume_url || '';
+                STATE.user.quiz_completed = currentUserProfile.quiz_completed || false;
             }
         }
 
@@ -1462,7 +1471,13 @@ function setupEventListeners() {
         if (supabase) {
             try {
                 const identifier = STATE.user.id;
-                const payload = { name: STATE.user.name, institution: STATE.user.college, skills: skillsArray, interests: STATE.user.interests };
+                const payload = { 
+                    name: STATE.user.name, 
+                    institution: STATE.user.college, 
+                    skills: skillsArray, 
+                    interests: STATE.user.interests,
+                    resume_url: STATE.user.resume_url || ''
+                };
                 const query = identifier
                     ? supabase.from('profiles').update(payload).eq('id', identifier)
                     : supabase.from('profiles').update(payload).eq('role', 'student');
@@ -1544,6 +1559,92 @@ function setupEventListeners() {
             updateDashboardUI();
         });
     }
+
+    // Resume/CV File Upload Handler
+    const resumeFileInput = document.getElementById('student-resume-file');
+    const resumeStatusEl = document.getElementById('student-resume-status');
+    if (resumeFileInput) {
+        resumeFileInput.addEventListener('change', (e) => {
+            const file = e.target.files[0];
+            if (!file) return;
+            if (file.size > 2 * 1024 * 1024) {
+                showToast("⚠️ File is too large. Limit is 2MB.");
+                return;
+            }
+            const reader = new FileReader();
+            reader.onload = function(evt) {
+                STATE.user.resume_url = evt.target.result;
+                if (resumeStatusEl) {
+                    resumeStatusEl.textContent = `Uploaded: ${file.name}`;
+                    resumeStatusEl.style.color = 'var(--color-emerald)';
+                }
+                showToast(`✅ Loaded: ${file.name}. Save details to update in Supabase.`);
+            };
+            reader.readAsDataURL(file);
+        });
+    }
+
+    // Student Skill Assessment Quiz Submit Handler
+    const quizForm = document.getElementById('student-assessment-quiz-form');
+    if (quizForm) {
+        quizForm.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const q1Val = quizForm.q1.value;
+            const q2Val = quizForm.q2.value;
+            const q3Val = quizForm.q3.value;
+            const quizErrorEl = document.getElementById('quiz-error');
+            
+            if (quizErrorEl) {
+                quizErrorEl.style.display = 'none';
+                quizErrorEl.textContent = '';
+            }
+
+            // Q1 = b (CRISPR-Cas9), Q2 = a (Two-sample t-test), Q3 = a (To provide context and outline existing work)
+            if (q1Val === 'b' && q2Val === 'a' && q3Val === 'a') {
+                if (supabase) {
+                    try {
+                        const identifier = STATE.user.id;
+                        const currentCredits = STATE.user.credits || 0;
+                        const newCredits = currentCredits + 15;
+                        
+                        const { error } = await supabase.from('profiles')
+                            .update({ 
+                                quiz_completed: true,
+                                credits: newCredits
+                            })
+                            .eq('id', identifier);
+                        
+                        if (error) throw error;
+                        
+                        STATE.user.quiz_completed = true;
+                        STATE.user.credits = newCredits;
+                        await loadDataFromSupabase();
+                        showToast("🎉 Correct! You scored +15 credits!");
+                        closeInfoModal('modal-student-quiz');
+                        updateDashboardUI();
+                    } catch (err) {
+                        console.error("Error updating quiz state in Supabase:", err);
+                        if (quizErrorEl) {
+                            quizErrorEl.textContent = "Error saving results to database. Please try again.";
+                            quizErrorEl.style.display = 'block';
+                        }
+                    }
+                } else {
+                    STATE.user.quiz_completed = true;
+                    STATE.user.credits = (STATE.user.credits || 0) + 15;
+                    showToast("🎉 Correct! (Mock) You scored +15 credits!");
+                    closeInfoModal('modal-student-quiz');
+                    updateDashboardUI();
+                }
+            } else {
+                if (quizErrorEl) {
+                    quizErrorEl.textContent = "❌ Incorrect answers. Please review and try again.";
+                    quizErrorEl.style.display = 'block';
+                }
+            }
+        });
+    }
+
 
     const modalLeadForm = document.getElementById('modal-lead-contact-form');
     if (modalLeadForm) {
@@ -2376,6 +2477,8 @@ async function handleRealAuthSession(session) {
             STATE.user.verified = profile.verified || false;
             STATE.user.referred_by_code = profile.referred_by_code || '';
             STATE.user.personal_ambassador_code = profile.personal_ambassador_code || '';
+            STATE.user.resume_url = profile.resume_url || '';
+            STATE.user.quiz_completed = profile.quiz_completed || false;
 
             switchActiveRole(profile.role);
             closeAuthModal();
@@ -3039,12 +3142,17 @@ function populateProfileForms() {
         const colEl   = document.getElementById('student-college');
         const actEl   = document.getElementById('student-activity');
         const skillEl = document.getElementById('student-skills');
+        const resumeStatusEl = document.getElementById('student-resume-status');
         if (nameEl  && user.name)       nameEl.value  = user.name;
         if (ageEl   && user.age)        ageEl.value   = user.age;
         if (genEl   && user.gender)     genEl.value   = user.gender;
         if (colEl   && user.institution) colEl.value  = user.institution || user.college || '';
         if (actEl   && user.interests)  actEl.value   = user.interests;
         if (skillEl)                    skillEl.value = skills;
+        if (resumeStatusEl && user.resume_url) {
+            resumeStatusEl.textContent = "Uploaded: resume.pdf";
+            resumeStatusEl.style.color = 'var(--color-emerald)';
+        }
     } else if (role === 'researcher') {
         const nameEl   = document.getElementById('res-name');
         const desigEl  = document.getElementById('res-designation');
@@ -4396,6 +4504,78 @@ function calculateProfileStrength() {
     return Math.min(score, 100);
 }
 
+function checkStudentJourneyStages() {
+    const hasName = !!(STATE.user.name && STATE.user.name.trim() && STATE.user.name !== 'Guest User');
+    const college = STATE.user.college || STATE.user.institution;
+    const hasCollege = !!(college && college.trim() !== '');
+    const hasResume = !!(STATE.user.resume_url && STATE.user.resume_url.trim());
+    const hasQuiz = !!STATE.user.quiz_completed;
+
+    const stage1Completed = hasName && hasCollege && hasResume && hasQuiz;
+
+    // Stage 2: Learning
+    const stage2Completed = STATE.courses && STATE.courses.some(c => c.progress === 100);
+
+    // Stage 3: Networking
+    const hasConnection = STATE.directory && STATE.directory.some(p => p.connected);
+    const hasPosted = STATE.feed && STATE.feed.some(post => post.author === STATE.user.name);
+    const stage3Completed = hasConnection || hasPosted;
+
+    // Stage 4: Opportunities
+    const stage4Completed = STATE.opportunities && STATE.opportunities.some(o => o.applied);
+
+    // Stage 5: Career Growth
+    const stage5Completed = false;
+
+    return {
+        stages: [
+            { id: 1, name: 'Onboarding', completed: stage1Completed, icon: 'fa-solid fa-user-gear' },
+            { id: 2, name: 'Learning', completed: stage2Completed, icon: 'fa-solid fa-book-open' },
+            { id: 3, name: 'Networking', completed: stage3Completed, icon: 'fa-solid fa-paper-plane' },
+            { id: 4, name: 'Opportunities', completed: stage4Completed, icon: 'fa-solid fa-user-tie' },
+            { id: 5, name: 'Career Growth', completed: stage5Completed, icon: 'fa-solid fa-graduation-cap' }
+        ],
+        details: {
+            hasName,
+            hasCollege,
+            hasResume,
+            hasQuiz,
+            stage2Completed,
+            hasConnection,
+            hasPosted,
+            stage4Completed
+        }
+    };
+}
+
+window.graduateStudentToMentor = async () => {
+    if (!requireAuth('Sign in to graduate your student journey.')) return;
+
+    if (supabase) {
+        try {
+            const identifier = STATE.user.id;
+            const { error } = await supabase.from('profiles')
+                .update({ role: 'mentor' })
+                .eq('id', identifier);
+            if (error) throw error;
+            
+            STATE.user.role = 'mentor';
+            switchActiveRole('mentor');
+            await loadDataFromSupabase();
+            showToast("🎉 Congratulations! You have graduated to Mentor status. Welcome to the Mentor workspace!");
+            switchView('dashboard');
+        } catch (err) {
+            console.error("Error graduating student to mentor:", err);
+            showToast("Error updating role in database.");
+        }
+    } else {
+        STATE.user.role = 'mentor';
+        switchActiveRole('mentor');
+        showToast("🎉 (Mock) Successfully graduated to Mentor status!");
+        switchView('dashboard');
+    }
+};
+
 function renderStudentDashboard() {
     // 1. Profile strength
     const nameEl = document.getElementById('student-portal-name');
@@ -4415,25 +4595,23 @@ function renderStudentDashboard() {
     }
     
     // 2. Roadmap Steppers
-    const methodologyCourse = STATE.courses.find(c => c.id === 1);
-    const methodologyCompleted = methodologyCourse && methodologyCourse.progress === 100;
-    const appliedProjectsCount = STATE.opportunities.filter(o => o.applied).length;
-    const connectedMentorsCount = STATE.directory.filter(p => p.connected).length;
-    const course3 = STATE.courses.find(c => c.id === 3);
-    const course3Completed = course3 && course3.progress === 100;
+    const journey = checkStudentJourneyStages();
+    const steps = journey.stages;
     
-    const steps = [
-        { id: 1, completed: strength >= 85, icon: 'fa-solid fa-user-gear' },
-        { id: 2, completed: methodologyCompleted, icon: 'fa-solid fa-book-open' },
-        { id: 3, completed: appliedProjectsCount > 0, icon: 'fa-solid fa-paper-plane' },
-        { id: 4, completed: connectedMentorsCount > 0, icon: 'fa-solid fa-user-tie' },
-        { id: 5, completed: course3Completed, icon: 'fa-solid fa-scroll' }
-    ];
+    let activeStageIndex = 0;
+    for (let i = 0; i < steps.length; i++) {
+        if (!steps[i].completed) {
+            activeStageIndex = i;
+            break;
+        }
+        if (i === steps.length - 1) {
+            activeStageIndex = steps.length - 1;
+        }
+    }
     
     for (let i = 0; i < steps.length; i++) {
         const step = steps[i];
-        const prevStepCompleted = i === 0 || steps[i - 1].completed;
-        const isActive = !step.completed && prevStepCompleted;
+        const isActive = (i === activeStageIndex);
         
         const node = document.getElementById(`step-${step.id}`);
         if (node) {
@@ -4461,6 +4639,141 @@ function renderStudentDashboard() {
             }
         }
     }
+
+    // Render Active Stage Actions Card
+    const cardTitleEl = document.getElementById('active-stage-card-title');
+    const cardBadgeEl = document.getElementById('active-stage-badge');
+    const cardBodyEl = document.getElementById('active-stage-card-body');
+
+    if (cardTitleEl && cardBadgeEl && cardBodyEl) {
+        const activeStage = steps[activeStageIndex];
+        cardTitleEl.textContent = `Active Stage: ${activeStage.name}`;
+        cardBadgeEl.textContent = `Stage ${activeStage.id} of 5`;
+        cardBadgeEl.className = 'badge-tag label-teal';
+
+        let bodyHtml = '';
+        const details = journey.details;
+
+        if (activeStage.id === 1) {
+            bodyHtml = `
+                <div style="display: flex; flex-direction: column; gap: 15px;">
+                    <p style="font-size: 0.85rem; color: var(--text-muted); margin: 0; line-height: 1.6;">
+                        Welcome to BioLabs! Complete your demographic profile, upload your resume/CV, and pass the academic skill assessment quiz to finish Stage 1 and unlock advanced learning paths.
+                    </p>
+                    <div style="display: flex; flex-direction: column; gap: 10px; padding: 12px; background: var(--bg-page); border-radius: var(--radius-sm); border: 1px solid var(--border-color);">
+                        <div style="display: flex; align-items: center; justify-content: space-between; font-size: 0.82rem;">
+                            <span style="color: var(--text-main);"><i class="fa-regular ${details.hasName && details.hasCollege ? 'fa-circle-check' : 'fa-circle'}" style="color: ${details.hasName && details.hasCollege ? 'var(--color-emerald)' : 'var(--text-muted)'}; margin-right: 6px;"></i> Academic Profile Details</span>
+                            <span style="font-weight: 700; color: ${details.hasName && details.hasCollege ? 'var(--color-emerald)' : 'var(--color-red)'};">${details.hasName && details.hasCollege ? 'Completed' : 'Pending'}</span>
+                        </div>
+                        <div style="display: flex; align-items: center; justify-content: space-between; font-size: 0.82rem;">
+                            <span style="color: var(--text-main);"><i class="fa-regular ${details.hasResume ? 'fa-circle-check' : 'fa-circle'}" style="color: ${details.hasResume ? 'var(--color-emerald)' : 'var(--text-muted)'}; margin-right: 6px;"></i> Resume/CV Upload</span>
+                            <span style="font-weight: 700; color: ${details.hasResume ? 'var(--color-emerald)' : 'var(--color-red)'};">${details.hasResume ? 'Uploaded' : 'Pending'}</span>
+                        </div>
+                        <div style="display: flex; align-items: center; justify-content: space-between; font-size: 0.82rem;">
+                            <span style="color: var(--text-main);"><i class="fa-regular ${details.hasQuiz ? 'fa-circle-check' : 'fa-circle'}" style="color: ${details.hasQuiz ? 'var(--color-emerald)' : 'var(--text-muted)'}; margin-right: 6px;"></i> Skill Assessment Quiz</span>
+                            <span style="font-weight: 700; color: ${details.hasQuiz ? 'var(--color-emerald)' : 'var(--color-red)'};">${details.hasQuiz ? 'Passed (+15 cr)' : 'Pending'}</span>
+                        </div>
+                    </div>
+                    <div style="display: flex; gap: 12px; margin-top: 5px;">
+                        ${!details.hasQuiz ? `
+                            <button class="action-btn primary-btn" style="background: var(--color-teal); border-color: var(--color-teal); cursor: pointer; padding: 6px 14px; font-size: 0.8rem;" onclick="window.openInfoModal('modal-student-quiz')">
+                                <i class="fa-solid fa-circle-question"></i> Take Skill Quiz
+                            </button>
+                        ` : ''}
+                        <button class="action-btn outline-btn" style="cursor: pointer; padding: 6px 14px; font-size: 0.8rem;" onclick="document.getElementById('student-name')?.focus();">
+                            <i class="fa-solid fa-user-pen"></i> Update Profile Details
+                        </button>
+                    </div>
+                </div>
+            `;
+        } else if (activeStage.id === 2) {
+            bodyHtml = `
+                <div style="display: flex; flex-direction: column; gap: 15px;">
+                    <p style="font-size: 0.85rem; color: var(--text-muted); margin: 0; line-height: 1.6;">
+                        Unlock the BioLabs curriculum! Join learning tracks, attend active workshops, and earn certificates. You must complete at least one course module to 100% to pass this stage.
+                    </p>
+                    <div style="display: flex; flex-direction: column; gap: 10px; padding: 12px; background: var(--bg-page); border-radius: var(--radius-sm); border: 1px solid var(--border-color);">
+                        <div style="display: flex; align-items: center; justify-content: space-between; font-size: 0.82rem;">
+                            <span style="color: var(--text-main);"><i class="fa-regular ${details.stage2Completed ? 'fa-circle-check' : 'fa-circle'}" style="color: ${details.stage2Completed ? 'var(--color-emerald)' : 'var(--text-muted)'}; margin-right: 6px;"></i> Complete a Course (100% progress)</span>
+                            <span style="font-weight: 700; color: ${details.stage2Completed ? 'var(--color-emerald)' : 'var(--color-red)'};">${details.stage2Completed ? 'Completed' : 'In Progress'}</span>
+                        </div>
+                    </div>
+                    <div style="display: flex; gap: 12px; margin-top: 5px;">
+                        <button class="action-btn primary-btn" style="background: var(--color-teal); border-color: var(--color-teal); cursor: pointer; padding: 6px 14px; font-size: 0.8rem;" onclick="switchView('dashboard'); switchTab('learning');">
+                            <i class="fa-solid fa-graduation-cap"></i> Open Learning Center
+                        </button>
+                    </div>
+                </div>
+            `;
+        } else if (activeStage.id === 3) {
+            bodyHtml = `
+                <div style="display: flex; flex-direction: column; gap: 15px;">
+                    <p style="font-size: 0.85rem; color: var(--text-muted); margin: 0; line-height: 1.6;">
+                        Connect with verified researchers and mentors, join communities, or participate in discussions. You need to connect with at least one mentor OR post an update on the community feed to pass this stage.
+                    </p>
+                    <div style="display: flex; flex-direction: column; gap: 10px; padding: 12px; background: var(--bg-page); border-radius: var(--radius-sm); border: 1px solid var(--border-color);">
+                        <div style="display: flex; align-items: center; justify-content: space-between; font-size: 0.82rem;">
+                            <span style="color: var(--text-main);"><i class="fa-regular ${details.hasConnection ? 'fa-circle-check' : 'fa-circle'}" style="color: ${details.hasConnection ? 'var(--color-emerald)' : 'var(--text-muted)'}; margin-right: 6px;"></i> Connect with a Mentor</span>
+                            <span style="font-weight: 700; color: ${details.hasConnection ? 'var(--color-emerald)' : 'var(--text-muted)'};">${details.hasConnection ? 'Connected' : 'Optional'}</span>
+                        </div>
+                        <div style="display: flex; align-items: center; justify-content: space-between; font-size: 0.82rem;">
+                            <span style="color: var(--text-main);"><i class="fa-regular ${details.hasPosted ? 'fa-circle-check' : 'fa-circle'}" style="color: ${details.hasPosted ? 'var(--color-emerald)' : 'var(--text-muted)'}; margin-right: 6px;"></i> Post in Community Feed</span>
+                            <span style="font-weight: 700; color: ${details.hasPosted ? 'var(--color-emerald)' : 'var(--text-muted)'};">${details.hasPosted ? 'Posted' : 'Optional'}</span>
+                        </div>
+                    </div>
+                    <div style="display: flex; gap: 12px; margin-top: 5px;">
+                        <button class="action-btn primary-btn" style="background: var(--color-teal); border-color: var(--color-teal); cursor: pointer; padding: 6px 14px; font-size: 0.8rem;" onclick="switchView('mentors');">
+                            <i class="fa-solid fa-users"></i> Meet Mentors
+                        </button>
+                        <button class="action-btn outline-btn" style="cursor: pointer; padding: 6px 14px; font-size: 0.8rem;" onclick="switchView('dashboard'); switchTab('feed');">
+                            <i class="fa-solid fa-comments"></i> Write Feed Post
+                        </button>
+                    </div>
+                </div>
+            `;
+        } else if (activeStage.id === 4) {
+            bodyHtml = `
+                <div style="display: flex; flex-direction: column; gap: 15px;">
+                    <p style="font-size: 0.85rem; color: var(--text-muted); margin: 0; line-height: 1.6;">
+                        Apply for lab projects, fellowships, or research internships. You must submit at least one active opportunity application to proceed to the final career growth stage.
+                    </p>
+                    <div style="display: flex; flex-direction: column; gap: 10px; padding: 12px; background: var(--bg-page); border-radius: var(--radius-sm); border: 1px solid var(--border-color);">
+                        <div style="display: flex; align-items: center; justify-content: space-between; font-size: 0.82rem;">
+                            <span style="color: var(--text-main);"><i class="fa-regular ${details.stage4Completed ? 'fa-circle-check' : 'fa-circle'}" style="color: ${details.stage4Completed ? 'var(--color-emerald)' : 'var(--text-muted)'}; margin-right: 6px;"></i> Submit a Research Project Application</span>
+                            <span style="font-weight: 700; color: ${details.stage4Completed ? 'var(--color-emerald)' : 'var(--color-red)'};">${details.stage4Completed ? 'Submitted' : 'Pending'}</span>
+                        </div>
+                    </div>
+                    <div style="display: flex; gap: 12px; margin-top: 5px;">
+                        <button class="action-btn primary-btn" style="background: var(--color-teal); border-color: var(--color-teal); cursor: pointer; padding: 6px 14px; font-size: 0.8rem;" onclick="switchView('opportunities');">
+                            <i class="fa-solid fa-search"></i> Find Opportunities
+                        </button>
+                    </div>
+                </div>
+            `;
+        } else if (activeStage.id === 5) {
+            bodyHtml = `
+                <div style="display: flex; flex-direction: column; gap: 15px;">
+                    <p style="font-size: 0.85rem; color: var(--text-muted); margin: 0; line-height: 1.6;">
+                        Congratulations! You have completed the student research milestones pipeline. You can now build your research portfolio, showcase work, or transition/graduate into a Mentor workspace to guide future students.
+                    </p>
+                    <div style="display: flex; flex-direction: column; gap: 10px; padding: 12px; background: var(--bg-page); border-radius: var(--radius-sm); border: 1px solid var(--border-color);">
+                        <div style="display: flex; align-items: center; justify-content: space-between; font-size: 0.82rem;">
+                            <span style="color: var(--text-main);"><i class="fa-regular fa-circle-check" style="color: var(--color-emerald); margin-right: 6px;"></i> Complete Student Journey Roadmap</span>
+                            <span style="font-weight: 700; color: var(--color-emerald);">Completed</span>
+                        </div>
+                    </div>
+                    <div style="display: flex; gap: 12px; margin-top: 5px;">
+                        <button class="action-btn primary-btn" style="background: var(--color-purple); border-color: var(--color-purple); color: #fff; cursor: pointer; padding: 8px 16px; font-size: 0.85rem; font-weight: bold; border-radius: var(--radius-sm);" onclick="window.graduateStudentToMentor()">
+                            <i class="fa-solid fa-graduation-cap"></i> Graduate to Mentor Workspace
+                        </button>
+                    </div>
+                </div>
+            `;
+        }
+
+        cardBodyEl.innerHTML = bodyHtml;
+    }
+
     
     // 3. Render applications table
     const appsListEl = document.getElementById('student-applications-tracker-list');
@@ -5286,7 +5599,7 @@ document.addEventListener('click', (e) => {
     const infoModals = [
         'modal-sponsors','modal-workshops','modal-university',
         'modal-hiring','modal-security','modal-terms',
-        'modal-ugc','modal-partnership','modal-certificate'
+        'modal-ugc','modal-partnership','modal-certificate','modal-student-quiz'
     ];
     infoModals.forEach(id => {
         const modal = document.getElementById(id);

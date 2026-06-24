@@ -28,7 +28,9 @@ ALTER TABLE public.profiles
   ADD COLUMN IF NOT EXISTS user_id uuid REFERENCES auth.users(id) ON DELETE CASCADE,
   ADD COLUMN IF NOT EXISTS email text DEFAULT '',
   ADD COLUMN IF NOT EXISTS referred_by_code text DEFAULT '',
-  ADD COLUMN IF NOT EXISTS personal_ambassador_code text DEFAULT '';
+  ADD COLUMN IF NOT EXISTS personal_ambassador_code text DEFAULT '',
+  ADD COLUMN IF NOT EXISTS resume_url text DEFAULT '',
+  ADD COLUMN IF NOT EXISTS quiz_completed boolean DEFAULT false;
 
 CREATE UNIQUE INDEX IF NOT EXISTS profiles_user_id_idx ON public.profiles(user_id);
 
